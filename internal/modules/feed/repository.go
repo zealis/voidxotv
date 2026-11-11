@@ -226,6 +226,59 @@ func (r *Repository) Gallery(ctx context.Context, contentID int64) ([]string, er
 	return result, rows.Err()
 }
 
+// InteractionStats 返回一条内容的真实互动计数（点赞 / 收藏 / 可见评论）。
+// 供 compose 填充 stats；shares 暂无数据源，恒为 0。
+func (r *Repository) InteractionStats(ctx context.Context, contentID int64) (Stats, error) {
+	var stats Stats
+	err := r.db.QueryRow(ctx, `
+		SELECT
+		  (SELECT count(*) FROM reactions WHERE content_id = $1 AND kind = 'like'),
+		  (SELECT count(*) FROM reactions WHERE content_id = $1 AND kind = 'favorite'),
+		  (SELECT count(*) FROM comments WHERE content_id = $1 AND status = 'visible')`,
+		contentID).Scan(&stats.Likes, &stats.Favorites, &stats.Comments)
+	if err != nil {
+		return Stats{}, fmt.Errorf("feed: interaction stats: %w", err)
+	}
+	return stats, nil
+}
+
+// ViewerMarks 是查看者对一条内容自己的互动标记。
+type ViewerMarks struct {
+	Liked     bool
+	Favorited bool
+}
+
+// ViewerReactions 批量返回查看者在这批内容上的点赞 / 收藏标记（§6.2 操作栏回显）。
+// 只回真正存在互动记录的条目：没有记录的键缺省，即未点亮。
+func (r *Repository) ViewerReactions(ctx context.Context, userID int64,
+	contentIDs []int64) (map[int64]ViewerMarks, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT content_id, kind FROM reactions
+		WHERE user_id = $1 AND kind IN ('like', 'favorite') AND content_id = ANY($2)`,
+		userID, contentIDs)
+	if err != nil {
+		return nil, fmt.Errorf("feed: viewer reactions: %w", err)
+	}
+	defer rows.Close()
+
+	marks := make(map[int64]ViewerMarks, len(contentIDs))
+	for rows.Next() {
+		var id int64
+		var kind string
+		if err := rows.Scan(&id, &kind); err != nil {
+			return nil, fmt.Errorf("feed: viewer reactions scan: %w", err)
+		}
+		mark := marks[id]
+		if kind == "like" {
+			mark.Liked = true
+		} else {
+			mark.Favorited = true
+		}
+		marks[id] = mark
+	}
+	return marks, rows.Err()
+}
+
 func (r *Repository) HandleByID(ctx context.Context, userID int64) (string, error) {
 	var handle string
 	if err := r.db.QueryRow(ctx, `SELECT handle FROM users WHERE id = $1`, userID).Scan(&handle); err != nil {

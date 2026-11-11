@@ -6,7 +6,7 @@ import type { FeedItem } from '~/composables/useFeed'
 import { ApiError, errorMessage } from '~/composables/useApi'
 
 const { list, detail, following, follow, avatar, tags, caption, formatCount } = useFeed()
-const { hydrate, state, setFollowing, toggleLike, toggleFavorite } = useInteractions()
+const { state, applyServer, setFollowing, toggleLike, toggleFavorite } = useInteractions()
 const player = useImmersivePlayer()
 // 观看进度上报（§9.1）：当前条目播放中每 10 秒补报，隐藏/离开立即补报。
 const reporter = useProgressReporter(player, () => (currentItem.value ? { id: currentItem.value.id, type: currentItem.value.type } : null))
@@ -54,18 +54,32 @@ function notify(message: string) {
 
 const currentItem = computed<FeedItem | null>(() => items.value[current.value] || null)
 
-function counts(item: FeedItem) {
-  const local = state(item.slug)
-  return {
-    likes: item.stats.likes + (local.liked ? 1 : 0),
-    comments: item.stats.comments,
-    favorites: item.stats.favorites + (local.favorited ? 1 : 0),
-    shares: item.stats.shares,
+// 点赞 / 收藏落库（§6.2）：接口成功才更新乐观状态与角标；未登录是预期场景，给引导不报错。
+async function onLike(item: FeedItem) {
+  try {
+    const liked = await toggleLike(item.slug, item.id)
+    item.stats.likes = Math.max(0, item.stats.likes + (liked ? 1 : -1))
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      notify('登录后才能点赞')
+      return
+    }
+    notify(errorMessage(error))
   }
 }
 
-const currentCounts = computed(() =>
-  currentItem.value ? counts(currentItem.value) : { likes: 0, comments: 0, favorites: 0, shares: 0 })
+async function onFavorite(item: FeedItem) {
+  try {
+    const favorited = await toggleFavorite(item.slug, item.id)
+    item.stats.favorites = Math.max(0, item.stats.favorites + (favorited ? 1 : -1))
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      notify('登录后才能收藏')
+      return
+    }
+    notify(errorMessage(error))
+  }
+}
 
 function preloadNeighbours() {
   if (!import.meta.client) return
@@ -207,6 +221,8 @@ async function loadFeed(scope: 'recommend' | 'follow') {
     if (scope === 'follow' && !response.items.length) {
       notify('关注流还没有作品，先去关注几位作者。')
     }
+    // 服务端互动标记覆盖本地乐观状态（§6.2）：换列表后点赞 / 收藏以服务端为准。
+    for (const item of response.items) applyServer(item.slug, !!item.liked, !!item.favorited)
     await hydrateFollows()
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
@@ -237,7 +253,6 @@ onMounted(() => {
 })
 
 onMounted(async () => {
-  hydrate()
   // 自动播放开关必须在首次激活前就位，所以先读偏好再拉列表。
   await loadPreferences()
   player.setAutoplay(preferences.value.autoplay)
@@ -270,12 +285,12 @@ onBeforeUnmount(() => {
           :item="item" :active="index === current" :avatar="avatar(item)"
           :liked="state(item.slug).liked" :favorited="state(item.slug).favorited"
           :following="state(item.slug).following"
-          :counts="counts(item)" :label="formatCount" :player="player.state"
+          :counts="item.stats" :label="formatCount" :player="player.state"
           :caption="caption(item.description)" :tags="tags(item.description)"
           :expanded="expanded"
           :autoplay="barAutoplay" :clear-ui="barClear"
-          @toggle="player.toggle()" @like="toggleLike(item.slug)"
-          @comment="sheetOpen = true" @favorite="toggleFavorite(item.slug)"
+          @toggle="player.toggle()" @like="onLike(item)"
+          @comment="sheetOpen = true" @favorite="onFavorite(item)"
           @share="onShare(item)" @follow="onFollow(item)" @report="reportOpen = true"
           @expand="expanded = !expanded" @unmute="player.setMuted(false)"
           @seek="player.seekRatio($event)"
@@ -307,7 +322,7 @@ onBeforeUnmount(() => {
     </div>
 
     <CommentSheet
-      :open="sheetOpen" :content-id="currentItem?.id ?? 0" :count="currentCounts.comments"
+      :open="sheetOpen" :content-id="currentItem?.id ?? 0" :count="currentItem?.stats.comments ?? 0"
       @close="sheetOpen = false"
       @count-change="onCommentCount"
     />

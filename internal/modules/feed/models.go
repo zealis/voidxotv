@@ -19,8 +19,8 @@ type Author struct {
 	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
-// Stats is intentionally zero until the interaction tables land in M4;
-// the client keeps optimistic local state for likes/favorites.
+// Stats 是 compose 实时查出的真实互动计数（reactions / comments，§6.2 角标口径）。
+// shares 暂无数据源，恒为 0。
 type Stats struct {
 	Likes     int64 `json:"likes"`
 	Comments  int64 `json:"comments"`
@@ -64,6 +64,10 @@ type Item struct {
 	Tags []string `json:"tags,omitempty"`
 	// POI 仅详情下发（full=true），列表条目不查以省一次 join。
 	POI *POI `json:"poi,omitempty"`
+	// Liked / Favorited 是当前登录查看者自己的点赞 / 收藏标记（§6.2 操作栏回显）。
+	// 仅 feed 列表与详情下发；匿名响应与公开缓存页（creator / topic）省略。
+	Liked     bool `json:"liked,omitempty"`
+	Favorited bool `json:"favorited,omitempty"`
 }
 
 type Response struct {

@@ -202,6 +202,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.attachAvatars(r.Context(), items)
+	h.applyViewerMarks(r.Context(), viewerID, items)
 	w.Header().Set("Cache-Control", "private, no-store")
 	httpserver.JSON(w, http.StatusOK, Response{Items: items, NextCursor: next, Count: len(items)})
 }
@@ -276,6 +277,7 @@ func (h *Handler) detail(w http.ResponseWriter, r *http.Request) {
 	}
 	single := []Item{item}
 	h.attachAvatars(r.Context(), single)
+	h.applyViewerMarks(r.Context(), viewerID, single)
 	w.Header().Set("Cache-Control", "private, no-store")
 	httpserver.JSON(w, http.StatusOK, single[0])
 }
@@ -304,6 +306,14 @@ func (h *Handler) compose(ctx context.Context, entry row, full bool) (Item, erro
 				item.POI = &poi
 			}
 		}
+	}
+
+	// 真实互动计数（§6.2 角标口径）：查询失败只记日志、保持零值，
+	// 计数缺失不应让整条内容从流里消失。
+	if stats, err := h.repo.InteractionStats(ctx, entry.ID); err != nil {
+		h.log.Warn("feed: interaction stats", "content_id", entry.ID, "error", err)
+	} else {
+		item.Stats = stats
 	}
 
 	// Image galleries have no transcode manifest: their first image is the cover.
@@ -385,6 +395,30 @@ func (h *Handler) attachAvatars(ctx context.Context, items []Item) {
 		}
 		if url, err := h.store.MediaURL(ctx, key); err == nil {
 			items[i].Author.AvatarURL = url
+		}
+	}
+}
+
+// applyViewerMarks 把查看者自己的点赞 / 收藏标记写回条目（§6.2 操作栏回显）。
+// 只在带登录态的接口（feed 列表 / 详情）调用：creator / topic 是公开缓存页，
+// 混入查看者状态会被 CDN 缓存串号。失败只记日志，回退到「未点亮」。
+func (h *Handler) applyViewerMarks(ctx context.Context, viewerID int64, items []Item) {
+	if viewerID <= 0 || len(items) == 0 {
+		return
+	}
+	ids := make([]int64, 0, len(items))
+	for i := range items {
+		ids = append(ids, items[i].ID)
+	}
+	marks, err := h.repo.ViewerReactions(ctx, viewerID, ids)
+	if err != nil {
+		h.log.Warn("feed: viewer reactions", "error", err)
+		return
+	}
+	for i := range items {
+		if mark, ok := marks[items[i].ID]; ok {
+			items[i].Liked = mark.Liked
+			items[i].Favorited = mark.Favorited
 		}
 	}
 }

@@ -39,6 +39,29 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.6.0] - 2026-11-11
+
+### 新增
+
+- 沉浸流（`/`）与深链接详情（`/video/*`、`/image/*`）的点赞 / 收藏真实落库：`ActionRail` 的爱心 / 星星按钮
+  现在调用 `POST /api/v1/contents/{id}/reactions`（kind=like/favorite），写入服务端 `reactions` 表并给作者发
+  互动通知；收藏后「我」页收藏 tab 真实出现该作品。feed 列表 / 详情接口下发真实互动计数
+  （`stats.likes/favorites/comments` 实时查 reactions / comments，此前恒为 0）与当前查看者的
+  `liked` / `favorited` 标记；查看者标记只在带登录态的 feed 接口下发，creator / topic 公开缓存页不带。
+
+### 修复
+
+- 「我」页（`/me`）喜欢 / 收藏 tab 永远为空：现象是点了收藏后列表仍是「还没有收藏的作品」；根因是前端
+  收藏 / 点赞只写 localStorage（M2 乐观缓存），服务端 `reactions` 表没有任何记录，`GET /me/likes` /
+  `GET /me/favorites` 查不到数据；改法是前端改调 `POST /api/v1/contents/{id}/reactions` 真实落库（见新增）。
+  深链接详情页的爱心 / 星星刷新后不回亮：SSR 取数（Nitro 内部同源代理）不带查看者会话，接口看不到登录态；
+  挂载后按会话补一次 `GET /api/v1/contents/{id}/reactions` 同步标记与计数（与稍后再看同口径）。
+
+### 改进
+
+- `useInteractions` 移除 M2 的 localStorage 乐观缓存：点赞 / 收藏 / 关注一律以服务端为准，内存只保留会话内
+  的乐观状态与角标增减；匿名点击不再假点亮，改为提示「登录后才能点赞 / 收藏」（与关注按钮同口径）。
+
 ## [0.5.4] - 2026-11-11
 
 ### 修复

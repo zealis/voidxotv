@@ -97,9 +97,11 @@ useHead(() => ({
 }))
 
 const { avatar, tags, caption, formatCount } = useFeed()
-const { hydrate, state, toggleLike, toggleFavorite, toggleFollow } = useInteractions()
+const { state, applyServer, toggleLike, toggleFavorite, toggleFollow } = useInteractions()
 const { api } = useApi()
 const player = useImmersivePlayer()
+// 服务端互动标记覆盖默认未点亮（§6.2）：详情带当前查看者的点赞 / 收藏。
+if (item.value) applyServer(item.value.slug, !!item.value.liked, !!item.value.favorited)
 // 观看进度（§9.1）：播放中定期上报，隐藏/离开补报；进入详情时取最近位置续播。
 const reporter = useProgressReporter(player, () => (item.value ? { id: item.value.id, type: item.value.type } : null))
 let resumed = false
@@ -134,6 +136,19 @@ async function loadWatchlist() {
   } catch { /* 匿名：默认未保存 */ }
 }
 
+// 互动状态（§6.2）：SSR 详情取数不带查看者会话，挂载后按会话补一次服务端真相
+// （点赞 / 收藏标记 + 真实计数），与稍后再看的取数口径一致。
+async function loadReactions() {
+  if (!item.value) return
+  try {
+    const data = await api<{ likes: number; favorites: number; liked: boolean; favorited: boolean }>(
+      `/api/v1/contents/${item.value.id}/reactions`)
+    applyServer(item.value.slug, data.liked, data.favorited)
+    item.value.stats.likes = data.likes
+    item.value.stats.favorites = data.favorites
+  } catch { /* 匿名：保持 SSR 计数与未点亮 */ }
+}
+
 async function toggleWatchlist() {
   if (!item.value) return
   try {
@@ -157,13 +172,30 @@ function notify(message: string) {
   toastTimer = setTimeout(() => { toast.value = '' }, 2400)
 }
 
-function counts(entry: FeedItem) {
-  const local = state(entry.slug)
-  return {
-    likes: entry.stats.likes + (local.liked ? 1 : 0),
-    comments: entry.stats.comments,
-    favorites: entry.stats.favorites + (local.favorited ? 1 : 0),
-    shares: entry.stats.shares,
+// 点赞 / 收藏落库（§6.2）：接口成功才更新乐观状态与角标；未登录是预期场景，给引导不报错。
+async function onLike(entry: FeedItem) {
+  try {
+    const liked = await toggleLike(entry.slug, entry.id)
+    entry.stats.likes = Math.max(0, entry.stats.likes + (liked ? 1 : -1))
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      notify('登录后才能点赞')
+      return
+    }
+    notify(errorMessage(error))
+  }
+}
+
+async function onFavorite(entry: FeedItem) {
+  try {
+    const favorited = await toggleFavorite(entry.slug, entry.id)
+    entry.stats.favorites = Math.max(0, entry.stats.favorites + (favorited ? 1 : -1))
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      notify('登录后才能收藏')
+      return
+    }
+    notify(errorMessage(error))
   }
 }
 
@@ -176,7 +208,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 onMounted(async () => {
-  hydrate()
+  void loadReactions()
   if (item.value && item.value.type === 'video') {
     player.attach(slot.value?.querySelector<HTMLElement>('.media-slot') || null)
     await player.load(item.value)
@@ -213,11 +245,11 @@ onBeforeUnmount(() => {
             :item="item" :active="true" :avatar="avatar(item)"
             :liked="state(item.slug).liked" :favorited="state(item.slug).favorited"
             :following="state(item.slug).following"
-            :counts="counts(item)" :label="formatCount" :player="player.state"
+            :counts="item.stats" :label="formatCount" :player="player.state"
             :caption="caption(item.description)" :tags="tags(item.description)"
             :expanded="expanded"
-            @toggle="player.toggle()" @like="toggleLike(item.slug)"
-            @comment="sheetOpen = true" @favorite="toggleFavorite(item.slug)"
+            @toggle="player.toggle()" @like="onLike(item)"
+            @comment="sheetOpen = true" @favorite="onFavorite(item)"
             @share="notify('深链接：' + deepLink)" @follow="toggleFollow(item.slug)" @report="reportOpen = true"
             @expand="expanded = !expanded" @unmute="player.setMuted(false)"
             @seek="player.seekRatio($event)"
@@ -243,7 +275,7 @@ onBeforeUnmount(() => {
       </section>
 
       <CommentSheet
-        :open="sheetOpen" :content-id="item.id" :count="counts(item).comments"
+        :open="sheetOpen" :content-id="item.id" :count="item.stats.comments"
         @close="sheetOpen = false" @count-change="onCommentCount"
       />
 

@@ -43,6 +43,9 @@ export interface FeedItem {
   tags?: string[]
   // 发布时添加的位置（§8）；仅详情下发。
   poi?: { name: string; address?: string }
+  // 当前登录查看者自己的点赞 / 收藏标记（§6.2）：匿名响应省略，缺省视为未点亮。
+  liked?: boolean
+  favorited?: boolean
 }
 
 export interface FeedResponse {
