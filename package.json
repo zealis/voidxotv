@@ -1,6 +1,6 @@
 {
   "name": "yejie",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "private": true,
   "scripts": {
     "dev": "npm --prefix apps/web run dev",
@@ -8,6 +8,10 @@
     "check": "npm --prefix apps/web run check",
     "test": "npm --prefix apps/web run test",
     "version:check": "node scripts/bump-version.mjs --check",
-    "version:bump": "node scripts/bump-version.mjs"
+    "version:bump": "node scripts/bump-version.mjs",
+    "dev:up": "node scripts/dev.mjs up",
+    "dev:watch": "node scripts/dev.mjs up --watch",
+    "dev:status": "node scripts/dev.mjs status",
+    "dev:restart": "node scripts/dev.mjs restart"
   }
 }

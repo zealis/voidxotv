@@ -18,15 +18,32 @@ deployments    生产 compose 与部署手册（DEPLOY.md）
 ## 本地开发
 
 ```bash
+node scripts/dev.mjs up --watch    # 推荐：容器 → 迁移 → API / Worker / Nuxt，并监听 Go 源码自动重启
+```
+
+拆开手动跑也可以：
+
+```bash
 docker compose up -d              # Postgres(5432) / Redis(6380) / S3 测试桶(9100)
 go run ./cmd/migrate -direction up
 go run ./cmd/seed                 # 可选：演示账号与运营数据
-scripts/dev.sh                    # 一键起 API + Worker + Nuxt dev
+scripts/dev.sh                    # 一键起 API + Worker + Nuxt dev（Linux / WSL，前台阻塞）
+```
+
+`scripts/dev.mjs` 的其他用法（Windows / macOS / Linux 通用）：
+
+```bash
+node scripts/dev.mjs up            # 起全套，已在跑的服务自动跳过；前台守护，Ctrl+C 收本次启动的进程
+node scripts/dev.mjs up --detach   # 只启动不守护，适合 CI
+node scripts/dev.mjs status        # 健康检查 + API 版本
+node scripts/dev.mjs restart api   # 改完后端：重建并重启（api / worker / web / all）
+node scripts/dev.mjs stop all      # 停止
 ```
 
 - API：`http://127.0.0.1:18080`（`/health/ready`）
 - 前端：`http://127.0.0.1:3000`
 - 环境变量样例见 `.env.example`；Go 进程不读 .env 文件，用 shell / compose 注入。
+- 进程日志在 `data/logs/{api,worker,web}.log`，pid 文件在 `data/pids/`。
 
 ## 版本与更新日志
 

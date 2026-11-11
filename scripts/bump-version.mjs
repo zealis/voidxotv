@@ -106,6 +106,14 @@ const body = unreleased[1]
   .replace(/\n{3,}/g, '\n\n')
   .trim()
 const hasEntries = /^### /m.test(body)
+
+// 空版本最容易出现在「条目写错地方」的时候：先在 [未发布] 写好再发布。
+if (!hasEntries && !dryRun && !args.includes('--force')) {
+  console.error('[未发布] 里没有 ### 条目，拒绝发布空版本。')
+  console.error('先把本次改动的条目写进 CHANGELOG.md 的 [未发布]（新增 / 修复 / 改进 / 重构 / 安全维护），')
+  console.error('确实要空发布时加 --force。')
+  process.exit(1)
+}
 const released = [
   '## [未发布]',
   '',
@@ -125,7 +133,7 @@ writes.push([
 if (dryRun) {
   console.log(`[dry-run] 版本 ${current} -> ${next}，将改动：`)
   for (const [path] of writes) console.log(`  - ${path.replace(root, '.')}`)
-  if (!hasEntries) console.log('  ! [未发布] 里没有 ### 条目，正式版本会写成「（无条目）」')
+  if (!hasEntries) console.log('  ! [未发布] 里没有 ### 条目，真实执行会被拒绝（加 --force 可强制空发布）')
   process.exit(0)
 }
 
