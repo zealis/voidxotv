@@ -1,0 +1,256 @@
+/* 夜街 · Design Token（组件库与设计 Token 实施规范 V1.0.2 §5）
+   :root 只放平台语义层与双体系共用值；沉浸取值只在 [data-surface="immersive"]
+   作用域挂载，admin 深色例外只在 [data-surface="admin"] 作用域挂载。 */
+
+:root {
+  /* 平台语义：品牌主色是唯一覆盖项；图表双色供后台 / 创作者看板共用 */
+  --vp-color-brand: #ff2e7e;
+  --vp-color-brand-soft: #ff77b0;
+  --vp-chart-primary: #ff2e7e;
+  --vp-chart-secondary: #26deed;
+
+  --vp-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+
+  /* 间距、圆角、动效（双体系共用） */
+  --vp-space-1: 4px;
+  --vp-space-2: 8px;
+  --vp-space-3: 12px;
+  --vp-space-4: 16px;
+  --vp-space-6: 24px;
+  --vp-space-8: 32px;
+  --vp-space-12: 48px;
+  --vp-space-16: 64px;
+  --vp-radius-control: 10px;
+  --vp-radius-media: 16px;
+  --vp-radius-panel: 20px;
+  --vp-radius-drawer: 26px;
+  --vp-motion-instant: 100ms;
+  --vp-motion-standard: 200ms;
+  --vp-motion-enter: 280ms;
+  --vp-motion-exit: 160ms;
+  --vp-ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* 工具型页面内容栏的统一尺子。以前各页各写一个值（820/860/1080），
+     宽屏下留白差异明显；新页面一律引用它，旧页面改造时逐步收敛。 */
+  --vp-layout-content-max: 1200px;
+}
+
+/* 沉浸界面恒为深色基线，不跟随工具页主题、不提供浅色变体（§5.6 / UI §14）。 */
+[data-surface="immersive"] {
+  --vp-im-bg: #0a0a1f;
+  --vp-im-surface: #141416;
+  --vp-im-surface-raised: #1c1c1f;
+  --vp-im-text-primary: #f5f5f7;
+  --vp-im-text-secondary: #a1a1aa;
+  --vp-im-border: #343438;
+  --vp-im-accent: #ff2e7e;
+  --vp-im-accent-soft: #ff77b0;
+  --vp-im-on-accent: #ffffff;
+  --vp-im-danger: #ff6961;
+  --vp-im-mask: rgba(10, 10, 31, 0.45);
+
+  --vp-im-glass-bg: rgba(20, 20, 22, 0.68);
+  --vp-im-glass-bg-media: rgba(12, 12, 14, 0.62);
+  --vp-im-glass-border: rgba(245, 245, 247, 0.14);
+  --vp-im-glass-blur: 20px;
+  --vp-im-glass-blur-compact: 12px;
+  --vp-im-glass-saturate: 140%;
+  --vp-im-scrim-top: linear-gradient(to bottom, rgba(0, 0, 0, 0.35), transparent);
+  --vp-im-scrim-bottom: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
+  --vp-im-focus-ring: 0 0 0 2px var(--vp-im-accent);
+
+  --vp-im-action-size: 50px;
+  --vp-im-action-gap: 16px;
+  /* 操作栏圆底：半透明白，不用玻璃描边，避免图标顶到边框（参考视频流产品做法）。 */
+  --vp-im-action-disc-bg: rgba(255, 255, 255, 0.14);
+  --vp-im-action-disc-bg-active: rgba(255, 46, 126, 0.22);
+  --vp-im-action-rail-offset-right: 12px;
+  /* 操作栏底边要落在播放控制条之上（控制条 68–118），否则唱片和更多按钮会被压住。 */
+  --vp-im-action-rail-offset-bottom: 126px;
+
+  --vp-im-z-media: 0;
+  --vp-im-z-player: 10;
+  --vp-im-z-topbar: 30;
+  --vp-im-z-controls: 40;
+  --vp-im-z-sheet: 50;
+  --vp-im-z-dialog: 60;
+  --vp-im-z-toast: 70;
+
+  color: var(--vp-im-text-primary);
+  background: var(--vp-im-bg);
+  font-family: var(--vp-font-sans);
+}
+
+/* 移动端不放播放控制条，操作栏/信息层回到底栏正上方，不留 65px 空档。 */
+@media (max-width: 780px) {
+  [data-surface="immersive"] {
+    --vp-im-action-rail-offset-bottom: 78px;
+  }
+}
+
+/* 后台作用域例外：固定深色，不切换 html.dark、不污染工具页偏好（§5.6）。 */
+[data-surface="admin"] {
+  --vp-im-bg: #0a0a1f;
+  --vp-im-surface: #141416;
+  --vp-im-surface-raised: #1c1c1f;
+  --vp-im-text-primary: #f5f5f7;
+  --vp-im-text-secondary: #a1a1aa;
+  --vp-im-border: #343438;
+  --vp-im-accent: #ff2e7e;
+  --vp-im-glass-bg: rgba(20, 20, 22, 0.68);
+  --vp-im-glass-border: rgba(245, 245, 247, 0.14);
+  color: var(--vp-im-text-primary);
+  background: var(--vp-im-bg);
+}
+
+/* 玻璃浮层：只允许顶部栏、操作按钮底、音乐条、抽屉、播放器浮层、Toast 使用。
+   视频画面本身禁止玻璃遮罩，可读性只靠 --vp-im-scrim-* 边缘渐变（UI §4.2 / §5.1）。 */
+.vp-glass {
+  background: var(--vp-im-glass-bg);
+  border: 1px solid var(--vp-im-glass-border);
+  -webkit-backdrop-filter: blur(var(--vp-im-glass-blur)) saturate(var(--vp-im-glass-saturate));
+  backdrop-filter: blur(var(--vp-im-glass-blur)) saturate(var(--vp-im-glass-saturate));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.vp-glass-compact {
+  -webkit-backdrop-filter: blur(var(--vp-im-glass-blur-compact)) saturate(var(--vp-im-glass-saturate));
+  backdrop-filter: blur(var(--vp-im-glass-blur-compact)) saturate(var(--vp-im-glass-saturate));
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .vp-glass,
+  .vp-glass-compact {
+    background: var(--vp-im-surface-raised);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .vp-glass,
+  .vp-glass-compact {
+    background: var(--vp-im-surface-raised);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:where(button, a, input, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--vp-im-focus-ring, 0 0 0 2px var(--vp-color-brand));
+}
+
+/* ── 工具型页面主题（UI 规范 §14）──────────────────────────────────
+   作用域与沉浸 / admin 严格隔离：
+   · [data-surface="immersive"] 恒深色，不读取 html[data-tool-theme]；
+   · [data-surface="admin"] 固定深色（§11.5 登记例外），同样不读取；
+   · 浅色覆盖只作用于 html[data-tool-theme="light"] [data-surface="tool"]。
+   深色默认值挂在 :root，供 VpSelect / VpSwitch 这类跨作用域共享的控件继承，
+   因此沉浸页与 admin 的控件观感完全不变。
+   浅色色板独立设计（非深色反转）：以 #f4f5f9 为底、白卡片分层，
+   文字与强调色单独压深以通过 WCAG 2.2 AA 4.5:1，详见 scripts/theme-contrast.mjs。 */
+/* 深色默认值供所有作用域的共享控件继承；工具页自身再覆写布局。 */
+:root {
+  /* 深色（默认）：与既有工具页观感一致 */
+  --vp-tool-bg: #0a0a1f;
+  --vp-tool-surface: rgba(255, 255, 255, 0.04);
+  --vp-tool-surface-2: rgba(255, 255, 255, 0.06);
+  --vp-tool-border: rgba(255, 255, 255, 0.06);
+  --vp-tool-border-strong: #75788a;
+  --vp-tool-divider: rgba(255, 255, 255, 0.05);
+  --vp-tool-text: #f5f5f7;
+  --vp-tool-text-2: #a1a1aa;
+  --vp-tool-accent: #ff2e7e;
+  --vp-tool-accent-ink: #ff77b0;
+  --vp-tool-accent-soft: rgba(255, 46, 126, 0.18);
+  --vp-tool-on-accent: #170a12;
+  --vp-tool-danger: #ff6961;
+  --vp-tool-danger-soft: rgba(255, 105, 97, 0.14);
+  --vp-tool-danger-ink: #ffb4ae;
+  --vp-tool-danger-border: rgba(255, 105, 97, 0.6);
+  --vp-tool-positive: #26deed;
+  --vp-tool-neutral: #a1a1aa;
+  --vp-tool-chart-bar: #26deed;
+  --vp-tool-chart-grid: rgba(255, 255, 255, 0.06);
+  --vp-tool-focus: rgba(255, 46, 126, 0.18);
+  --vp-tool-overlay: rgba(4, 4, 12, 0.7);
+  --vp-tool-dialog: #16161d;
+  --vp-tool-dialog-border: rgba(255, 255, 255, 0.1);
+  --vp-tool-input: rgba(6, 6, 20, 0.75);
+  --vp-tool-input-border: #75788a;
+  --vp-tool-panel: #1c1c1f;
+  --vp-tool-panel-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  --vp-tool-knob: #ffffff;
+  --vp-tool-track: rgba(255, 255, 255, 0.16);
+  --vp-tool-hover: rgba(255, 255, 255, 0.09);
+  --vp-tool-item-active: rgba(255, 255, 255, 0.08);
+  --vp-tool-knob-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* 工具页容器：自身承载主题背景，页面底部不会露出 html 的深色底。 */
+[data-surface="tool"] {
+  min-height: 100vh;
+  color: var(--vp-tool-text);
+  background: var(--vp-tool-bg);
+  font-family: var(--vp-font-sans);
+}
+
+html[data-tool-theme="light"] [data-surface="tool"] {
+  --vp-tool-bg: #f4f5f9;
+  --vp-tool-surface: #ffffff;
+  --vp-tool-surface-2: #e9ebf2;
+  --vp-tool-border: #e2e5ee;
+  --vp-tool-border-strong: #8a90a0;
+  --vp-tool-divider: #eaecf3;
+  --vp-tool-text: #171a2b;
+  --vp-tool-text-2: #5b6175;
+  --vp-tool-accent: #c2185b;
+  --vp-tool-accent-ink: #b3124f;
+  --vp-tool-accent-soft: rgba(194, 24, 91, 0.1);
+  --vp-tool-on-accent: #ffffff;
+  --vp-tool-danger: #c8322b;
+  --vp-tool-danger-soft: #fdeceb;
+  --vp-tool-danger-ink: #a8231d;
+  --vp-tool-danger-border: #e3a5a1;
+  --vp-tool-positive: #0b7f8f;
+  --vp-tool-neutral: #6b7183;
+  --vp-tool-chart-bar: #3f8ba5;
+  --vp-tool-chart-grid: #dde1eb;
+  --vp-tool-focus: rgba(194, 24, 91, 0.2);
+  --vp-tool-overlay: rgba(18, 20, 38, 0.42);
+  --vp-tool-dialog: #ffffff;
+  --vp-tool-dialog-border: #dfe3ed;
+  --vp-tool-input: #ffffff;
+  --vp-tool-input-border: #8a90a0;
+  --vp-tool-panel: #ffffff;
+  --vp-tool-panel-shadow: 0 18px 40px rgba(20, 24, 42, 0.16);
+  --vp-tool-knob: #ffffff;
+  --vp-tool-track: #c9cede;
+  --vp-tool-hover: #dfe3ed;
+  --vp-tool-item-active: #eef0f6;
+  --vp-tool-knob-shadow: 0 1px 3px rgba(20, 24, 42, 0.28);
+}
+
+/* 工具页的对话框 / 遮罩放在 [data-surface] 容器内，随主题一起切换；
+   focus-visible 在工具页改用工具页强调色，避免拿到沉浸作用域的粉环。 */
+[data-surface="tool"] :where(button, a, input, textarea, [tabindex]):focus-visible {
+  box-shadow: 0 0 0 3px var(--vp-tool-focus);
+}
+
+/* 浅色工具页时连 overscroll 区域也不露深色；:has 在旧浏览器退化为深色底，
+   不影响可读性。SPA 跳回沉浸页时 :has 立即不成立，body 自动回到深色。 */
+/* 这两个祖先拿不到后代 [data-surface="tool"] 上的变量覆盖，故写与浅色
+   令牌一致的实值（--vp-tool-bg / --vp-tool-text 的浅色取值）。 */
+html[data-tool-theme="light"]:has([data-surface="tool"]) body,
+html[data-tool-theme="light"]:has([data-surface="tool"]) #__nuxt {
+  background: #f4f5f9;
+  color: #171a2b;
+}

@@ -1,0 +1,377 @@
+<script setup lang="ts">
+// M2 沉浸流主界面（Page 1 / UI 规范 §5、§6）。
+// 单例 <video> 在切条时被移动到当前条目的媒体槽；只渲染当前及前后各一条。
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { FeedItem } from '~/composables/useFeed'
+import { ApiError, errorMessage } from '~/composables/useApi'
+
+const { list, detail, following, follow, avatar, tags, caption, formatCount } = useFeed()
+const { hydrate, state, setFollowing, toggleLike, toggleFavorite } = useInteractions()
+const player = useImmersivePlayer()
+// 观看进度上报（§9.1）：当前条目播放中每 10 秒补报，隐藏/离开立即补报。
+const reporter = useProgressReporter(player, () => (currentItem.value ? { id: currentItem.value.id, type: currentItem.value.type } : null))
+const { preferences, load: loadPreferences } = usePreferences()
+
+const route = useRoute()
+const items = ref<FeedItem[]>([])
+const current = ref(0)
+// 桌面发布页「朋友」导航用 /?channel=follow 直达关注流（UI 规范 §8.1）。
+const channel = ref<'follow' | 'recommend'>(route.query.channel === 'follow' ? 'follow' : 'recommend')
+const loading = ref(true)
+const errorText = ref('')
+const sheetOpen = ref(false)
+// 评论抽屉回传服务端口径的总数，写回当前条目供操作栏角标使用。
+function onCommentCount(total: number) {
+  if (currentItem.value) currentItem.value.stats.comments = total
+}
+
+const reportOpen = ref(false)
+function onReported() {
+  toast.value = '举报已提交，处置结果将在「我的举报」中反馈'
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value = '' }, 2600)
+}
+const expanded = ref(false)
+// 控制条上的播放选项（§6.4）：连播 / 清屏都是纯前端开关，先把状态与视觉跑通。
+const barAutoplay = ref(true)
+const barClear = ref(false)
+function toggleBarAutoplay() {
+  barAutoplay.value = !barAutoplay.value
+  player.setAutoplay(barAutoplay.value)
+}
+const toast = ref('')
+const scroller = ref<HTMLElement | null>(null)
+
+let observer: IntersectionObserver | null = null
+let activation = 0
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function notify(message: string) {
+  toast.value = message
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value = '' }, 2400)
+}
+
+const currentItem = computed<FeedItem | null>(() => items.value[current.value] || null)
+
+function counts(item: FeedItem) {
+  const local = state(item.slug)
+  return {
+    likes: item.stats.likes + (local.liked ? 1 : 0),
+    comments: item.stats.comments,
+    favorites: item.stats.favorites + (local.favorited ? 1 : 0),
+    shares: item.stats.shares,
+  }
+}
+
+const currentCounts = computed(() =>
+  currentItem.value ? counts(currentItem.value) : { likes: 0, comments: 0, favorites: 0, shares: 0 })
+
+function preloadNeighbours() {
+  if (!import.meta.client) return
+  for (const index of [current.value - 1, current.value + 1]) {
+    const url = items.value[index]?.media.poster_url
+    if (url) {
+      const image = new Image()
+      image.src = url
+    }
+  }
+}
+
+async function activateCurrent() {
+  const item = items.value[current.value]
+  if (!item) return
+  const ticket = ++activation
+  expanded.value = false
+  player.pause()
+  // 沉浸流内滑动不再同步 URL（§5.1 定案修订）：地址栏保持 /，刷新回沉浸流，
+  // 滑动体验不丢。单视频深链接（/video/{slug}）由详情页与分享面板承载。
+
+  // 列表只带签名摘要；当前条目再取一次详情以拿到重写后的 HLS 播放列表。
+  try {
+    const full = await detail(item.slug)
+    if (ticket !== activation) return
+    items.value[current.value] = {
+      ...item,
+      media: full.media,
+      images: full.images.length ? full.images : item.images,
+    }
+  } catch {
+    if (ticket !== activation) return
+  }
+
+  const active = items.value[current.value]
+  if (!active || ticket !== activation) return
+  const root = scroller.value
+  const slot = root?.querySelector<HTMLElement>(`[data-feed-index="${current.value}"] .media-slot`)
+  player.attach(slot || null)
+  await player.load(active)
+  preloadNeighbours()
+}
+
+function setupObserver() {
+  const root = scroller.value
+  if (!root || observer) return
+  observer = new IntersectionObserver((entries) => {
+    let best: { index: number; ratio: number } | null = null
+    for (const entry of entries) {
+      const index = Number((entry.target as HTMLElement).dataset.feedIndex)
+      if (!best || entry.intersectionRatio > best.ratio) best = { index, ratio: entry.intersectionRatio }
+    }
+    if (!best) return
+    if (best.ratio >= 0.9 && best.index !== current.value) {
+      current.value = best.index
+      void activateCurrent()
+    } else if (best.ratio < 0.9) {
+      player.pause()
+    }
+  }, { root, threshold: [0, 0.5, 0.75, 0.9, 1] })
+  root.querySelectorAll('[data-feed-index]').forEach((element) => observer?.observe(element))
+}
+
+function go(index: number) {
+  const root = scroller.value
+  if (!root) return
+  const target = Math.min(Math.max(index, 0), items.value.length - 1)
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  root.scrollTo({ top: target * root.clientHeight, behavior: reduced ? 'auto' : 'smooth' })
+}
+
+function onKeydown(event: KeyboardEvent) {
+  const target = event.target as HTMLElement | null
+  if (target?.matches('input, textarea, [contenteditable="true"]')) return
+  if (sheetOpen.value) return
+  switch (event.key) {
+    case 'ArrowDown': event.preventDefault(); go(current.value + 1); break
+    case 'ArrowUp': event.preventDefault(); go(current.value - 1); break
+    case ' ': event.preventDefault(); void player.toggle(); break
+    case 'm': case 'M': player.setMuted(!player.state.muted); break
+    case 'f': case 'F': void player.toggleFullscreen(); break
+  }
+}
+
+function onVisibility() {
+  if (document.hidden) player.pause()
+}
+
+function reload() {
+  if (import.meta.client) window.location.reload()
+}
+
+async function onShare(item: FeedItem) {
+  const path = item.type === 'image' ? `/image/${item.slug}` : `/video/${item.slug}`
+  try {
+    await navigator.clipboard.writeText(`${location.origin}${path}`)
+    notify('深链接已复制')
+  } catch {
+    notify(`分享链接：${path}`)
+  }
+}
+
+// 关注以服务端为准：登录后按 /me/following 覆盖本地缓存，
+// 避免旧 localStorage 里「已关注」的假状态继续显示。
+async function hydrateFollows() {
+  try {
+    const handles = new Set(await following())
+    for (const entry of items.value) setFollowing(entry.slug, handles.has(entry.author.handle))
+  } catch {
+    // 游客或接口暂时不可用：保留本地状态，不阻塞播放。
+  }
+}
+
+async function onFollow(item: FeedItem) {
+  const next = !state(item.slug).following
+  try {
+    const result = await follow(item.author.handle, next)
+    // 同一作者可能有多条作品，关注状态要一起同步。
+    for (const entry of items.value) {
+      if (entry.author.handle === item.author.handle) setFollowing(entry.slug, result.following)
+    }
+    notify(result.following ? `已关注 @${item.author.handle}` : `已取消关注 @${item.author.handle}`)
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      notify('登录后才能关注作者')
+      return
+    }
+    notify(errorMessage(error))
+  }
+}
+
+async function loadFeed(scope: 'recommend' | 'follow') {
+  loading.value = true
+  errorText.value = ''
+  try {
+    const response = await list(12, '', scope)
+    items.value = response.items
+    current.value = 0
+    if (scope === 'follow' && !response.items.length) {
+      notify('关注流还没有作品，先去关注几位作者。')
+    }
+    await hydrateFollows()
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      notify('登录后才能查看关注流')
+      channel.value = 'recommend'
+      return
+    }
+    items.value = []
+    errorText.value = errorMessage(error)
+  } finally {
+    loading.value = false
+  }
+  // 列表整体换掉后旧的观察目标已失效，必须重建。
+  observer?.disconnect()
+  observer = null
+  await nextTick()
+  setupObserver()
+  if (items.value.length) await activateCurrent()
+}
+
+watch(channel, async (value, previous) => {
+  if (value === previous) return
+  await loadFeed(value)
+})
+
+onMounted(() => {
+  reporter.start()
+})
+
+onMounted(async () => {
+  hydrate()
+  // 自动播放开关必须在首次激活前就位，所以先读偏好再拉列表。
+  await loadPreferences()
+  player.setAutoplay(preferences.value.autoplay)
+  await loadFeed(channel.value)
+  window.addEventListener('keydown', onKeydown)
+  document.addEventListener('visibilitychange', onVisibility)
+})
+
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  observer = null
+  player.destroy()
+  window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('visibilitychange', onVisibility)
+  if (import.meta.client) window.history.replaceState(window.history.state, '', '/')
+})
+</script>
+
+<template>
+  <div class="feed-root" data-surface="immersive">
+    <ChromeBars v-model:channel="channel" />
+
+    <div ref="scroller" class="scroller" :inert="sheetOpen || undefined">
+      <div
+        v-for="(item, index) in items" :key="item.id"
+        class="snap" :data-feed-index="index"
+      >
+        <ImmersiveItem
+          v-if="Math.abs(index - current) <= 1"
+          :item="item" :active="index === current" :avatar="avatar(item)"
+          :liked="state(item.slug).liked" :favorited="state(item.slug).favorited"
+          :following="state(item.slug).following"
+          :counts="counts(item)" :label="formatCount" :player="player.state"
+          :caption="caption(item.description)" :tags="tags(item.description)"
+          :expanded="expanded"
+          :autoplay="barAutoplay" :clear-ui="barClear"
+          @toggle="player.toggle()" @like="toggleLike(item.slug)"
+          @comment="sheetOpen = true" @favorite="toggleFavorite(item.slug)"
+          @share="onShare(item)" @follow="onFollow(item)" @report="reportOpen = true"
+          @expand="expanded = !expanded" @unmute="player.setMuted(false)"
+          @seek="player.seekRatio($event)"
+          @rate="player.setRate($event)" @level="player.setLevel($event)"
+          @volume="player.setVolume($event)"
+          @autoplay-toggle="toggleBarAutoplay" @clear-toggle="barClear = !barClear"
+          @pip="player.requestPiP()" @fullscreen="player.toggleFullscreen()"
+          @notice="notify($event)"
+          @retry="currentItem && player.load(currentItem)"
+        />
+        <div v-else class="placeholder">
+          <img v-if="item.media.poster_url" :src="item.media.poster_url" alt="" loading="lazy" />
+        </div>
+      </div>
+    </div>
+
+    <div v-if="loading" class="cover-state" role="status">
+      <div class="skeleton" />
+      <p>正在装载夜街…</p>
+    </div>
+    <div v-else-if="errorText" class="cover-state">
+      <p>{{ errorText }}</p>
+      <button type="button" class="state-action" @click="reload()">重试</button>
+    </div>
+    <div v-else-if="!items.length" class="cover-state">
+      <h1>夜街还没有作品</h1>
+      <p>发布第一条视频或图集，让这里亮起来。</p>
+      <NuxtLink to="/publish" class="state-action">去发布</NuxtLink>
+    </div>
+
+    <CommentSheet
+      :open="sheetOpen" :content-id="currentItem?.id ?? 0" :count="currentCounts.comments"
+      @close="sheetOpen = false"
+      @count-change="onCommentCount"
+    />
+
+    <ReportDialog
+      :open="reportOpen" :content-id="currentItem?.id ?? 0"
+      :content-title="currentItem?.title || ''"
+      @close="reportOpen = false"
+      @reported="onReported"
+    />
+
+    <div v-if="toast" class="toast vp-glass vp-glass-compact" role="status">{{ toast }}</div>
+  </div>
+</template>
+
+<style scoped>
+.feed-root { position: relative; height: 100dvh; overflow: hidden; background: var(--vp-im-bg); }
+.scroller {
+  height: 100dvh;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-y: contain;
+}
+.scroller::-webkit-scrollbar { display: none; }
+.snap { height: 100dvh; scroll-snap-align: start; }
+.placeholder { height: 100%; display: grid; place-items: center; background: var(--vp-im-bg); }
+.placeholder img { max-width: 100%; max-height: 100%; object-fit: contain; opacity: 0.5; }
+.cover-state {
+  position: fixed;
+  inset: 0;
+  z-index: var(--vp-im-z-dialog);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  background: var(--vp-im-bg);
+}
+.cover-state h1 { margin: 0; font-size: 22px; }
+.cover-state p { margin: 0; font-size: 13px; color: var(--vp-im-text-secondary); }
+.skeleton { width: 180px; height: 260px; border-radius: var(--vp-radius-media); background: var(--vp-im-surface-raised); }
+.state-action {
+  margin-top: 8px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--vp-im-accent);
+  color: var(--vp-im-on-accent);
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  /* 让开播放控制条（68–118），提示不要盖住弹幕输入框。 */
+  bottom: calc(132px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: var(--vp-im-z-toast);
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+</style>

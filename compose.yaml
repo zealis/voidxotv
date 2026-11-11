@@ -1,0 +1,62 @@
+# 夜街 · 本地开发依赖（仅数据库 / 缓存 / S3 测试桶；应用进程本地运行）
+# 端口只绑定 127.0.0.1，口令为本地开发占位值，不得用于任何生产环境。
+name: yejie-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: yejie
+      POSTGRES_USER: yejie
+      POSTGRES_PASSWORD: yejie_dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yejie -d yejie"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      # 本机 6379 常被其他项目的 Redis 占用，开发端口改用 6380 隔离。
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # S3 兼容测试桶。minio/minio:latest 在部分镜像源不可用，改用与参考实现一致的
+  # versitygw（POSIX 后端）；生产仍为 Cloudflare R2 + Backblaze B2 私人桶。
+  s3:
+    image: versity/versitygw:latest
+    command:
+      - --port
+      - "0.0.0.0:7070"
+      - --cors-allow-origin
+      - "*"
+      - posix
+      - /data/vgw
+    environment:
+      ROOT_ACCESS_KEY: yejie_dev
+      ROOT_SECRET_KEY: yejie_dev_secret
+    ports:
+      # 本机 9000 常被其他服务占用，开发端口改用 9100。
+      - "127.0.0.1:9100:7070"
+    volumes:
+      - s3-data:/data/vgw
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  redis-data:
+  s3-data:

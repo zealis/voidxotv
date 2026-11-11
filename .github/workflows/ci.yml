@@ -1,0 +1,87 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: yejie
+          POSTGRES_USER: yejie
+          POSTGRES_PASSWORD: yejie_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U yejie -d yejie"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      YJ_ENV: test
+      YJ_DATABASE_URL: postgres://yejie:yejie_ci@127.0.0.1:5432/yejie?sslmode=disable
+      YJ_REDIS_ADDR: 127.0.0.1:6379
+      YJ_HTTP_ADDR: 127.0.0.1:18080
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Format gate
+        run: test -z "$(gofmt -l ./cmd ./internal ./migrations)"
+      - run: go vet ./...
+      # 注入数据库连接：notifications / content 等 DB 集成测试（自带迁移 +
+      # 咨询锁）只有在 YJ_DATABASE_URL 存在时才会运行，缺省跳过。
+      - run: go test -race ./...
+        env:
+          YJ_DATABASE_URL: postgres://yejie:yejie_ci@127.0.0.1:5432/yejie?sslmode=disable
+      - run: go build ./...
+      - name: Migration idempotency
+        run: |
+          go run ./cmd/migrate -direction up
+          go run ./cmd/migrate -direction up
+      - name: Readiness smoke
+        run: |
+          go run ./cmd/api &
+          pid=$!
+          trap 'kill $pid' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/health/ready >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/health/live
+          curl -fsS http://127.0.0.1:18080/health/ready
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci --prefix apps/web
+      - run: npm run check --prefix apps/web
+      - run: npm run build --prefix apps/web
+
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 版本号四处（VERSION / 两个 package.json / buildinfo.go）必须一致；
+      # 顺便校验 bump 脚本能读到 CHANGELOG 的 [未发布] 段落，否则发布流程会断。
+      - run: node scripts/bump-version.mjs --check
+      - run: node scripts/bump-version.mjs patch --dry-run

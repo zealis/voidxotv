@@ -1,0 +1,75 @@
+<script setup lang="ts">
+// 统一线性 SVG 图标体系（UI 规范 §11.4）：同一线宽，不混用多套风格。
+// 需要实心（filled）时切到同一族的实心字形，避免「线性描边被填充」露出描边毛刺。
+const props = withDefaults(defineProps<{ name: string; size?: number; filled?: boolean }>(), {
+  size: 24,
+  filled: false,
+})
+
+const paths: Record<string, string> = {
+  home: 'M3 10.6 12 3l9 7.6V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+  discover: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm3.5 5.5-2 5-5 2 2-5z',
+  plus: 'M12 5v14M5 12h14',
+  message: 'M4 5h16v11H9l-5 4z',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-8 8a8 8 0 0 1 16 0',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5 12 5 5',
+  heart: 'M12 20s-7-4.5-7-9.5A3.5 3.5 0 0 1 12 8a3.5 3.5 0 0 1 7 2.5C19 15.5 12 20 12 20Z',
+  comment: 'M4 5h16v11H9l-5 4z',
+  star: 'M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z',
+  share: 'M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 15V3m0 0L8 7m4-4 4 4',
+  music: 'M9 18V6l10-2v12M9 18a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Zm10-2a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z',
+  play: 'M8 5.5 19 12 8 18.5z',
+  pause: 'M9 5v14M15 5v14',
+  pip: 'M21 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-2 9h-6v5h6Z',
+  expand: 'M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4',
+  volume: 'M4 9h4l5-4v14l-5-4H4zM17 9a4 4 0 0 1 0 6',
+  mute: 'M4 9h4l5-4v14l-5-4H4zM17 9l4 6m0-6-4 6',
+  close: 'M6 6l12 12M18 6 6 18',
+  image: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4',
+  back: 'M15 5l-7 7 7 7',
+  check: 'M5 12l5 5L19 7',
+  more: 'M6 12h.01M12 12h.01M18 12h.01',
+  follow: 'M12 5v14M5 12h14',
+  retry: 'M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4',
+  chevron: 'M6 9l6 6 6-6',
+  // 后台导航用图标（同一套 24 格线性风格）
+  chart: 'M4 19V5M4 19h16M7.5 15.2l3.4-3.9 3 1.9 4.3-5.2',
+  shield: 'M12 3.2l6.8 2.9v5.2c0 4-2.8 7-6.8 9.2-4-2.2-6.8-5.2-6.8-9.2V6.1zM9.2 11.8l2 2 3.6-3.9',
+  hash: 'M9.6 4.2 7.1 19.8M16.9 4.2 14.4 19.8M4.6 9.4h15M4 14.6h15',
+  flag: 'M5.5 20.5V4.2M5.5 4.2h11.8l-2 3.9 2 3.9H5.5',
+  settings: 'M4 7.5h7M15.5 7.5H20M4 16.5h4M10.5 16.5H20M15 7.5a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM10 16.5a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z',
+  // 播放控制条（§6.4）：循环 / 弹幕输入的表情入口。
+  loop: 'M4.5 12a7.5 7.5 0 0 1 12.9-5.2M19.5 12a7.5 7.5 0 0 1-12.9 5.2M18 3.5v4h-4M6 20.5v-4h4',
+  face: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9 10h.01M15 10h.01M8.5 14.2a4.6 4.6 0 0 0 7 0',
+  lock: 'M7.5 10.5h9A1.5 1.5 0 0 1 18 12v6.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 18.5V12a1.5 1.5 0 0 1 1.5-1.5ZM9 10.5V8a3 3 0 0 1 6 0v2.5',
+}
+
+// 实心字形只给操作栏与反馈动画这类需要「实心块面」的场景，其余仍用线性。
+const solids: Record<string, string> = {
+  heart:
+    'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z',
+  comment:
+    'M12 3.2c5.2 0 9.3 3.6 9.3 8.1s-4.1 8.1-9.3 8.1c-.8 0-1.6-.08-2.34-.24L4.2 21.4l1.02-4.02C3.44 15.9 2.7 13.75 2.7 11.3c0-4.5 4.1-8.1 9.3-8.1z',
+  star: 'M12 2.6l2.98 6.04 6.66.97-4.82 4.7 1.14 6.63L12 17.8l-5.96 3.14 1.14-6.63L2.36 9.61l6.66-.97z',
+  share: 'M14 9V5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11z',
+}
+
+const solid = computed(() => (props.filled ? solids[props.name] || '' : ''))
+</script>
+
+<template>
+  <svg
+    :width="props.size"
+    :height="props.size"
+    viewBox="0 0 24 24"
+    :fill="solid ? 'currentColor' : 'none'"
+    :stroke="solid ? 'none' : 'currentColor'"
+    stroke-width="1.7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path :d="solid || paths[props.name] || paths.more" />
+  </svg>
+</template>

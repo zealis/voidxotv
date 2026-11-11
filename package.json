@@ -1,0 +1,13 @@
+{
+  "name": "yejie",
+  "version": "0.5.2",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "check": "npm --prefix apps/web run check",
+    "test": "npm --prefix apps/web run test",
+    "version:check": "node scripts/bump-version.mjs --check",
+    "version:bump": "node scripts/bump-version.mjs"
+  }
+}

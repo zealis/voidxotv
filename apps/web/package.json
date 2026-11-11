@@ -1,0 +1,27 @@
+{
+  "name": "yejie-web",
+  "version": "0.5.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "check": "nuxt prepare && nuxt typecheck",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "element-plus": "^2.14.8",
+    "hls.js": "^1.7.4",
+    "nuxt": "^4.6.4",
+    "vue": "^3.5.45",
+    "yejie": "file:../.."
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0",
+    "vue-tsc": "^3.3.14"
+  }
+}

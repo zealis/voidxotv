@@ -1,0 +1,53 @@
+# Go
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Node / Nuxt
+node_modules/
+.nuxt/
+.output/
+apps/web/.nuxt/
+apps/web/.output/
+apps/web/node_modules/
+dist/
+
+# Local config / secrets
+.env
+.env.*
+!.env.example
+compose.override.yaml
+
+# Bundled local toolchain (large binaries, not source)
+/.tools/
+
+# Local runtime data
+/data/
+# 本地编译产物（脚本与 CI 直接 go run / go build）
+/bin/
+/uploads/
+/tmp/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Birdview artifacts are read-only visualization output, keep them out of the source tree
+/.birdview/
+
+# 本地 UI 验证截图（.tools/headless-test 生成，18MB+，不进版本库）
+/gui-test-screenshots/
+
+# 编辑器/助手会话临时文件
+*.zcode-session
+
+# 设计规范与设计图：仅本地保留，仓库不发布（19MB，且含内部设计决策）
+/设计文档/
+
+# 开发过程的工作日志与助手记忆：内部资料，不入库
+/.workbuddy/

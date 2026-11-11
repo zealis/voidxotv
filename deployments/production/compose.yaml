@@ -1,0 +1,91 @@
+# 夜街 · 生产部署编排（单机 compose 起步，应用进程也可改为 systemd / K8s 托管）
+# 设计依据：开发技术规范 §2（单体优先）、§10.5（PostgreSQL 为事实来源，Redis 可重建）、
+# §11.7（自建 SMTP 经 Outbox 投递）。密钥一律从环境注入，不得写入本文件。
+#
+# 使用方式：
+#   1. 复制 ../../.env.example 为 deployments/production/.env 并填写生产凭据；
+#   2. 构建镜像或在宿主机编译后挂载二进制（见 DEPLOY.md）；
+#   3. docker compose --env-file .env up -d
+#   4. 首次启动：docker compose exec api /app/yejie-api migrate 用法见下（迁移先于应用）。
+name: yejie
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?must be set}
+      POSTGRES_USER: ${POSTGRES_USER:?must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    # 数据库不对外暴露端口；需要运维访问时用 ssh 隧道。
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?must be set}", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/yejie/voidxotv-api:latest   # 或 build: { context: ../.., dockerfile: deployments/production/api.Dockerfile }
+    env_file: .env
+    environment:
+      YJ_ENV: production
+      YJ_HTTP_ADDR: ":18080"
+      YJ_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      YJ_REDIS_ADDR: redis:6379
+      YJ_REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:18080:18080"   # 由反向代理（Nginx/Caddy）终止 TLS 后转发
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:18080/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/yejie/voidxotv-worker:latest
+    env_file: .env
+    environment:
+      YJ_ENV: production
+      YJ_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      YJ_REDIS_ADDR: redis:6379
+      YJ_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      YJ_WORKER_TEMP_DIR: /tmp/yejie-transcode
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+    # 生产镜像需内置 ffmpeg/ffprobe（DEPLOY.md 给出 Dockerfile 模板）。
+
+  web:
+    image: ghcr.io/yejie/voidxotv-web:latest
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: 0.0.0.0
+      API_ORIGIN: http://api:18080
+      NUXT_PUBLIC_SITE_URL: ${YJ_SITE_URL:?must be set}
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  redis-data:
