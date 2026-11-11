@@ -26,6 +26,11 @@ mkdirSync(logDir, { recursive: true })
 const isWin = process.platform === 'win32'
 const exe = (name) => (isWin ? `${name}.exe` : name)
 
+// 守护进程必须活到用户按 Ctrl+C：单个子任务出错不该带走整套服务。
+process.on('unhandledRejection', (error) => {
+  console.error('未处理的 Promise 异常（守护继续）：', error?.message ?? error)
+})
+
 // 开发环境默认值：与 scripts/dev.sh 同一套凭据，仅本机使用。
 const env = {
   ...process.env,
@@ -168,14 +173,29 @@ async function stop(name) {
   }
 }
 
+// 编译失败不能把守护进程带崩：返回布尔值，调用方决定是沿用上一版二进制还是跳过。
 function build(name) {
   console.log(`  编译 ${name} …`)
-  sh('go', ['build', '-o', services[name].bin, services[name].build])
+  const result = spawnSync('go', ['build', '-o', services[name].bin, services[name].build], {
+    cwd: root,
+    env,
+    stdio: 'inherit',
+    shell: isWin,
+  })
+  if (result.status === 0) return true
+  console.error(`  ✗ ${name} 编译失败（退出码 ${result.status}），沿用上一版二进制`)
+  return false
 }
 
-async function start(name) {
+async function start(name, options = {}) {
   const spec = services[name]
-  if (spec.kind === 'go') build(name)
+  if (spec.kind === 'go' && !options.built) {
+    const ok = build(name)
+    if (!ok && !existsSync(spec.bin)) {
+      console.error(`  ✗ ${name} 没有可用的二进制（且源码编译不过），跳过启动`)
+      return false
+    }
+  }
   // spawn 的 stdio 只接受已打开的文件描述符，WriteStream 在 open 之前 fd 为 null。
   const fd = openSync(logFile(name), 'a')
   appendFileSync(logFile(name), `\n=== ${new Date().toISOString()} 启动 ${name} ===\n`)
@@ -187,6 +207,7 @@ async function start(name) {
   child.unref()
   writeFileSync(pidFile(name), String(child.pid), 'utf8')
   console.log(`  已启动 ${name}（pid ${child.pid}，日志 data/logs/${name}.log）`)
+  return true
 }
 
 async function waitHealthy(name, seconds) {
@@ -234,8 +255,8 @@ async function up(detach, withWatch) {
       console.log(`  ${name} 已在运行，跳过`)
       continue
     }
-    await start(name)
-    started.push(name)
+    const ok = await start(name)
+    if (ok) started.push(name)
   }
   console.log('[4/4] 等待就绪')
   for (const name of Object.keys(services)) {
@@ -272,8 +293,17 @@ async function restart(names) {
       console.error(`未知服务：${name}（可选 api / worker / web / all）`)
       process.exit(1)
     }
+    // 先编译：编译不过就不动现有进程，避免「停掉了却起不来」。
+    if (services[name].kind === 'go' && !build(name)) {
+      if (!existsSync(services[name].bin)) {
+        console.error(`  ✗ ${name} 无可用二进制，跳过`)
+      } else {
+        console.error(`  ↳ ${name} 沿用正在运行的旧进程`)
+      }
+      continue
+    }
     await stop(name)
-    await start(name)
+    await start(name, { built: true })
     const ok = await waitHealthy(name, name === 'web' ? 120 : 20)
     console.log(`  ${name} ${ok ? '已恢复' : `未通过健康检查，看 data/logs/${name}.log`}`)
   }
@@ -291,11 +321,21 @@ function watchSources() {
       const names = [...pending]
       pending.clear()
       console.log(`\n检测到改动：${names.join(' / ')}，重建重启`)
-      for (const name of names) {
-        await stop(name)
-        await start(name)
+      try {
+        for (const name of names) {
+          // 先编译再停旧进程：源码编译不过时保持现有服务继续跑，不制造空窗。
+          if (services[name].kind === 'go' && !build(name)) {
+            console.error(`  ↳ ${name} 保持原进程不动；修好后保存会自动再试`)
+            continue
+          }
+          await stop(name)
+          await start(name, { built: true })
+        }
+        await status()
+      } catch (error) {
+        // 重启过程中的任何意外都不该结束监听。
+        console.error(`重建重启出错，监听继续：${error.message}`)
       }
-      await status()
     }, 400)
   }
   for (const dir of ['internal', 'cmd']) {

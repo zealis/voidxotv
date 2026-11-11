@@ -1,6 +1,6 @@
 {
   "name": "yejie",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "scripts": {
     "dev": "npm --prefix apps/web run dev",
