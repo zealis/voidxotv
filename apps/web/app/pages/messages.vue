@@ -403,9 +403,12 @@ function when(value: string): string {
   display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 11px;
   background: rgba(255, 255, 255, 0.1); color: var(--vp-im-text-secondary);
 }
-/* 操作钮在标题行内与时间居中对齐：负外边距抵消按钮盒撑高标题行，行高节奏不变。 */
+/* 操作钮在标题行内与时间居中对齐：负外边距抵消按钮盒撑高标题行，行高节奏不变。
+   必须重置按钮默认 padding（1px 6px）：border-box 24px 被 padding 挤成 12px 内容盒，
+   18px 图标会溢出并顶到右 padding 缘（水平偏 3px）。 */
 .ops {
   flex: none; width: 24px; height: 24px; margin-block: -5px;
+  padding: 0;
   display: grid; place-items: center;
   border: none; background: transparent; border-radius: 50%; cursor: pointer;
   color: var(--vp-im-text-secondary);
