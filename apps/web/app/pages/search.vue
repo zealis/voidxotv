@@ -366,11 +366,14 @@ function linkOf(item: FeedItem) {
   display: flex; gap: 10px; flex-wrap: wrap;
   max-width: 1080px; margin: 0 auto 18px;
 }
-/* 内容列统一与搜索输入框左缘对齐：让开返回按钮（34px）+ 间距（10px）。
-   本页无全局 border-box reset，带 padding 的块必须显式声明，否则 1080 变成内容宽、整体左漂。 */
+/* 左对齐内容与搜索输入框左缘对齐：让开返回按钮（34px）+ 间距（10px）。
+   本页无全局 border-box reset，带 padding 的块必须显式声明，否则 1080 变成内容宽、整体左漂。
+   注意缩进只给左对齐的块：空态 / 登录门 / 加载更多是居中块，吃了不对称缩进会偏离视口中心
+   （窄屏上一眼可见），必须保持无 padding 才能真正居中。 */
 .filters,
 .notice,
-.gate, .hot, .results, .hint {
+.hot h2, .hot ul,
+.summary, .grid, .hint {
   box-sizing: border-box;
   padding-left: 44px;
 }
