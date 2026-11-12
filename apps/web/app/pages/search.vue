@@ -341,6 +341,8 @@ function linkOf(item: FeedItem) {
 }
 .bar { display: flex; align-items: center; gap: 10px; max-width: 1080px; margin: 0 auto 16px; }
 .back {
+  /* border-box：34px 是含描边的外径，下方筛选行按 34 + 10 对齐搜索输入框。 */
+  box-sizing: border-box;
   width: 34px; height: 34px; display: grid; place-items: center;
   border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.16);
   color: var(--vp-im-text-primary); text-decoration: none; font-size: 15px;
@@ -362,6 +364,10 @@ function linkOf(item: FeedItem) {
 .filters {
   display: flex; gap: 10px; flex-wrap: wrap;
   max-width: 1080px; margin: 0 auto 18px;
+  /* 与上方搜索输入框左缘对齐：让开返回按钮（34px）+ 间距（10px）。
+     页面无全局 border-box reset，带 padding 必须显式声明，否则 1080 变成内容宽、整体左漂。 */
+  box-sizing: border-box;
+  padding-left: 44px;
 }
 .notice {
   max-width: 1080px; margin: 0 auto 14px; font-size: 12px;
