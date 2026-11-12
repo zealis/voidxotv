@@ -39,6 +39,15 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.6.1] - 2026-11-12
+
+### 修复
+
+- 桌面播放控制条的弹幕输入框点击/键盘聚焦时出现一圈品牌粉描边，与深色控制条不协调（像表单报错）：
+  根因是全局 `:focus-visible` 给 `input` 加 `--vp-im-focus-ring`，移动端 `.dm-sheet` 早已抑制，
+  但桌面 `.pb-input` 漏了同一处理。现在 `.pb-input input:focus-visible` 去掉粉环，
+  改由 `.pb-input:focus-within` 提亮边框与底色表达焦点（透明边框 + `box-sizing: border-box`，无 1px 位移）。
+
 ## [0.6.0] - 2026-11-11
 
 ### 新增

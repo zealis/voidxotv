@@ -729,8 +729,12 @@ function onSeek(event: MouseEvent) {
   height: 32px;
   padding: 0 10px;
   border-radius: 8px;
+  /* 透明边框只为焦点态留位置，避免 :focus-within 改颜色时产生 1px 位移。 */
+  border: 1px solid transparent;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.1);
   color: var(--vp-im-text-secondary);
+  transition: border-color 160ms ease, background-color 160ms ease;
 }
 .pb-input input {
   flex: 1;
@@ -742,6 +746,13 @@ function onSeek(event: MouseEvent) {
   outline: none;
 }
 .pb-input input::placeholder { color: rgba(255, 255, 255, 0.42); }
+/* 与移动端 .dm-sheet 同一口径：整条已经是输入态，内部再套一圈全局粉色
+   focus-visible 环会像表单报错；焦点改由外层边框/底色提亮表达。 */
+.pb-input input:focus-visible { box-shadow: none; }
+.pb-input:focus-within {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+}
 .pb-send {
   flex: none;
   height: 30px;
