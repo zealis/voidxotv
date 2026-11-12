@@ -401,6 +401,8 @@ function linkOf(item: FeedItem) {
 .empty-state .used { margin: 6px 0 14px; font-size: 12px; color: var(--vp-im-text-secondary); }
 .empty-state .suggest { display: flex; gap: 10px; justify-content: center; }
 .hot h2 { margin: 0 0 10px; font-size: 14px; color: var(--vp-im-text-secondary); }
+/* 搜索历史与热门搜索相邻堆叠时的纵向间隔（两块都是 .hot）。 */
+.hot + .hot { margin-top: 28px; }
 .hot ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .hot li { display: flex; align-items: center; gap: 6px; }
 .hot button {
