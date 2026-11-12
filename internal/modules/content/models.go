@@ -39,6 +39,9 @@ type Content struct {
 	// MediaStatus 不是 contents 列：仅「我的作品」列表为视频补充转码状态
 	// （ready / processing / failed / none），前端据此显示「处理中」徽标（§10）。
 	MediaStatus string `json:"media_status,omitempty"`
+	// 卡片网格字段：仅「我的作品 / 喜欢 / 收藏」列表批量补齐，其它接口不带。
+	PosterURL string `json:"poster_url,omitempty"`
+	LikeCount int64  `json:"like_count,omitempty"`
 }
 
 type CreateDraftInput struct {

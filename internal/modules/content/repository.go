@@ -285,6 +285,64 @@ func (r *Repository) ReactedContents(ctx context.Context, userID int64, kind str
 	return result, rows.Err()
 }
 
+// CardMeta 是「我」页卡片网格需要的批量元数据：封面地址（driver:key）与点赞数。
+// 与 interactions.attachPosters 同口径：图集取首图、视频取产物清单里的 poster。
+type CardMeta struct {
+	Cover string
+	Likes int64
+}
+
+func (r *Repository) CardMeta(ctx context.Context, ids []int64) (map[int64]CardMeta, error) {
+	result := make(map[int64]CardMeta, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT c.id,
+		       COALESCE(
+		         (SELECT s.driver || ':' || s.object_key
+		            FROM media_assets m
+		            JOIN storage_objects s ON s.media_asset_id = m.id
+		           WHERE m.content_id = c.id AND m.kind = 'image'
+		           ORDER BY m.position, m.id
+		           LIMIT 1),
+		         (SELECT 's3:' || (f->>'key')
+		            FROM artifact_manifests am,
+		                 jsonb_array_elements(am.manifest->'files') f
+		           WHERE am.content_id = c.id
+		             AND (f->>'key' LIKE '%/poster.webp'
+		                  OR f->>'key' LIKE '%/poster-%'
+		                  OR f->>'key' LIKE '%/cover-%')
+		           ORDER BY CASE
+		             WHEN f->>'key' LIKE '%/poster.webp' THEN 0
+		             WHEN f->>'key' LIKE '%/poster-%' THEN 1
+		             ELSE 2 END
+		           LIMIT 1)
+		       ) AS cover,
+		       (SELECT count(*) FROM reactions
+		         WHERE content_id = c.id AND kind = 'like') AS likes
+		  FROM contents c
+		 WHERE c.id = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("content: card meta: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var cover *string
+		var likes int64
+		if err := rows.Scan(&id, &cover, &likes); err != nil {
+			return nil, fmt.Errorf("content: scan card meta: %w", err)
+		}
+		meta := CardMeta{Likes: likes}
+		if cover != nil {
+			meta.Cover = *cover
+		}
+		result[id] = meta
+	}
+	return result, rows.Err()
+}
+
 // AuthorOf 用于列表补作者信息（喜欢/收藏列表展示他人作品）。
 func (r *Repository) AuthorHandles(ctx context.Context, ids []int64) (map[int64]string, error) {
 	result := map[int64]string{}

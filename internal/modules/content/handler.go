@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/yejie/voidxotv/internal/modules/auth"
@@ -181,6 +182,12 @@ func (h *Handler) mine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.attachMediaStatus(r.Context(), items)
+	views := h.cardViews(r.Context(), contentIDs(items))
+	for i := range items {
+		view := views[items[i].ID]
+		items[i].PosterURL = view.PosterURL
+		items[i].LikeCount = view.LikeCount
+	}
 	httpserver.JSON(w, http.StatusOK, map[string]any{
 		"items": items, "count": len(items), "has_more": hasMore, "offset": offset,
 	})
@@ -215,6 +222,48 @@ func (h *Handler) attachMediaStatus(ctx context.Context, items []Content) {
 	}
 }
 
+func contentIDs(items []Content) []int64 {
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	return ids
+}
+
+// cardView 是列表卡片的可展示字段。
+type cardView struct {
+	PosterURL string
+	LikeCount int64
+}
+
+// cardViews 一次批量补齐封面与点赞数。driver=s3 走签名 URL，
+// local_temp 的 demo 路径直接用（与 interactions.attachPosters 同口径，
+// 否则会把 /demo/c1.jpeg 当 S3 key 签成 404）。查询失败只记日志，
+// 卡片回退到类型占位，不影响列表本身。
+func (h *Handler) cardViews(ctx context.Context, ids []int64) map[int64]cardView {
+	views := make(map[int64]cardView, len(ids))
+	metas, err := h.svc.repo.CardMeta(ctx, ids)
+	if err != nil {
+		h.log.Warn("card meta lookup failed", "error", err)
+		return views
+	}
+	for id, meta := range metas {
+		view := cardView{LikeCount: meta.Likes}
+		driver, key, ok := strings.Cut(meta.Cover, ":")
+		if ok && key != "" {
+			if driver == "s3" && h.imageStore != nil {
+				if url, err := h.imageStore.MediaURL(ctx, key); err == nil {
+					view.PosterURL = url
+				}
+			} else if driver != "s3" {
+				view.PosterURL = key
+			}
+		}
+		views[id] = view
+	}
+	return views
+}
+
 // myCounts 提供「我」页面的计数区（获赞 / 关注 / 粉丝）。
 func (h *Handler) myCounts(w http.ResponseWriter, r *http.Request) {
 	principal, _ := auth.PrincipalFromContext(r.Context())
@@ -235,6 +284,16 @@ func (h *Handler) myReactions(w http.ResponseWriter, r *http.Request, kind strin
 	if err != nil {
 		h.writeError(w, r, err)
 		return
+	}
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	views := h.cardViews(r.Context(), ids)
+	for i := range items {
+		view := views[items[i].ID]
+		items[i].PosterURL = view.PosterURL
+		items[i].LikeCount = view.LikeCount
 	}
 	httpserver.JSON(w, http.StatusOK, map[string]any{"items": items, "count": len(items)})
 }
