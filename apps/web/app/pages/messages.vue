@@ -283,13 +283,14 @@ function when(value: string): string {
               <strong>{{ item.title }}</strong>
               <span v-if="!item.read_at" class="badge" aria-label="未读"></span>
               <time :datetime="item.created_at">{{ when(item.created_at) }}</time>
+              <!-- 操作钮与时间同一条 flex 行：stop 避免冒泡成「标记已读」。 -->
+              <button type="button" class="ops" aria-label="通知操作" @click.stop="openMenu(item)">
+                <ImIcon name="more" :size="18" />
+              </button>
             </div>
             <p class="body">{{ item.body }}</p>
             <span class="kind">{{ kindText[item.kind] || item.kind }}</span>
           </div>
-          <button type="button" class="ops" aria-label="通知操作" @click="openMenu(item)">
-            <ImIcon name="more" :size="18" />
-          </button>
         </li>
       </ul>
       <button
@@ -402,8 +403,10 @@ function when(value: string): string {
   display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 11px;
   background: rgba(255, 255, 255, 0.1); color: var(--vp-im-text-secondary);
 }
+/* 操作钮在标题行内与时间居中对齐：负外边距抵消按钮盒撑高标题行，行高节奏不变。 */
 .ops {
-  flex: none; width: 30px; height: 30px; display: grid; place-items: center;
+  flex: none; width: 24px; height: 24px; margin-block: -5px;
+  display: grid; place-items: center;
   border: none; background: transparent; border-radius: 50%; cursor: pointer;
   color: var(--vp-im-text-secondary);
 }
