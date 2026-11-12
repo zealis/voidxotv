@@ -235,16 +235,18 @@ function linkOf(item: FeedItem) {
     </header>
 
     <section class="filters" aria-label="筛选">
+      <!-- 前缀文字（分类/类型/时长）与下拉值「全部分类 / 全部时长」重复，只留胶囊下拉；
+           读屏用户走 aria-label。 -->
       <VpSelect
-        v-model="category" label="分类" aria-label="按分类筛选"
+        v-model="category" aria-label="按分类筛选"
         :options="categoryOptions" @change="searched && submit()"
       />
       <VpSelect
-        v-model="type" label="类型" aria-label="按内容类型筛选"
+        v-model="type" aria-label="按内容类型筛选"
         :options="typeOptions" @change="searched && submit()"
       />
       <VpSelect
-        v-model="duration" label="时长" aria-label="按时长筛选"
+        v-model="duration" aria-label="按时长筛选"
         :options="durationOptions" @change="searched && submit()"
       />
     </section>
@@ -270,7 +272,6 @@ function linkOf(item: FeedItem) {
             <button type="button" @click="useHistory(term)">{{ term }}</button>
           </li>
         </ul>
-        <p class="privacy">历史仅保存在本机浏览器（最多 10 条），不会上传。</p>
       </section>
 
       <section v-if="!searched && hot.length" class="hot">
@@ -396,7 +397,6 @@ function linkOf(item: FeedItem) {
   font-size: 11px;
   cursor: pointer;
 }
-.privacy { margin: 6px 0 0; font-size: 11px; color: var(--vp-im-text-secondary); }
 .empty-state { text-align: center; padding: 30px 0; }
 .empty-state .used { margin: 6px 0 14px; font-size: 12px; color: var(--vp-im-text-secondary); }
 .empty-state .suggest { display: flex; gap: 10px; justify-content: center; }
