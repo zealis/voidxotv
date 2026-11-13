@@ -322,7 +322,9 @@ function onSeek(event: MouseEvent) {
     <!-- 播放控制条（§6.4）：视频与底栏之间常显；倍速 / 清晰度 / 音量都收在这一条上。 -->
     <div
       v-if="props.active && props.item.type === 'video' && props.player.ready"
-      ref="bar" class="player-bar" @click.stop
+      ref="bar" class="player-bar"
+      :class="{ 'player-bar--flush': props.player.playing }"
+      @click.stop
     >
       <!-- 进度：贴在控制条上沿的细线，点击或方向键都能定位。 -->
       <div
@@ -649,6 +651,13 @@ function onSeek(event: MouseEvent) {
   -webkit-backdrop-filter: blur(10px) saturate(120%);
   backdrop-filter: blur(10px) saturate(120%);
   color: var(--vp-im-text-primary);
+}
+/* PC 端底栏在播放时收起：控制条同步落到屏幕最底部，消除它下面那条 61px 空区；
+   暂停时回到 61px 贴住底栏顶边。过渡时长与底栏收起一致，切换不会跳一下。
+   移动端（≤780px）控制条本就隐藏，这条规则不生效。 */
+@media (min-width: 781px) {
+  .player-bar { transition: bottom 200ms ease; }
+  .player-bar--flush { bottom: 0; }
 }
 /* 进度线放在条内顶部：贴在条外会被视频画面吃掉，2px 的线根本看不清。 */
 .pb-progress {
