@@ -70,22 +70,27 @@ node scripts/dev.mjs stop all      # 停止
 
 ## 评论表情
 
-评论输入框的表情按钮打开 Twemoji 面板（8 个分类、228 个表情），选中后插入到光标处；
-评论正文里的表情渲染成同源 SVG，清单外的表情回落系统字体。
+评论输入框的表情按钮打开 **Noto 3D** 表情面板（8 个分类、225 个常用表情），选中后插入到光标处；
+评论正文里的表情渲染成同源 PNG，清单外的表情回落系统字体。
 
 - **为什么自托管**：前端 CSP 是 `img-src 'self' data: blob:`，外链图片会被拦；
   自托管也不依赖第三方 CDN 的可用性。
-- **清单唯一事实来源**：`apps/web/app/data/emoji.json`。加表情只需往分类里加字符，再跑
-  `npm run emoji:sync`（`scripts/sync-emoji.mjs`）从 `参考资料/twemoji-14.0.2` 复制对应 SVG 到
-  `apps/web/public/emoji/`，并校验有没有缺失。`参考资料/` 是 16MB 素材源，不入库。
-- **文件名规则**：Twemoji 用 code point 十六进制序列命名，变体选择符 `FE0F` 省略
-  （`❤️` → `2764.svg`）；`emojiSrc()` 做同样的归一化，让 `❤` 与 `❤️` 命中同一张图。
+- **素材是字体不是图片**：`参考资料/Noto-3D-Emoji-Fonts/` 给的是 `Noto-3D-128*.ttf`，
+  图形以 **sbix**（Apple 位图字体表）内嵌 PNG 的形式存在。`scripts/sync-emoji3d.mjs`
+  直接解析 TTF（cmap 码点 → 字形号、sbix 字形 → 内嵌 PNG），零依赖导出，不引入图形库。
+- **只导出常用表情**：字体里有 1400+ 个表情，整套搬进来既没必要也拖慢面板；
+  导出范围完全由清单决定。清单唯一事实来源是 `apps/web/app/data/emoji.json`，加表情只需
+  往分类里加字符，再跑 `npm run emoji:sync`（`--check` 只校验，`--ppem=82` 换一档尺寸）。
+- **文件名规则**：code point 十六进制序列命名，变体选择符 `FE0F` 省略
+  （`❤️` → `2764.png`）；`emojiSrc()` 做同样的归一化，让 `❤` 与 `❤️` 命中同一张图。
+- **不支持组合表情**：这套字体没有 `😮‍💨`、`❤️‍🔥` 这类 ZWJ 组合的字形（GSUB 里也没有对应连字），
+  强行塞进去只会得到第一段的图。所以清单里不放组合表情，它们回落到系统字体。
 - **插入而不是替换**：按光标位置插入并恢复光标，输入框 `maxlength=200` 由代码兜底。
 - `@` 提及仍是占位入口（`disabled`），功能未实现。
 
-**署名**：图形来自 [Twemoji](https://github.com/jdecked/twemoji) 14.0.2，
-按 [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) 授权；
-许可证随资源放在 `apps/web/public/emoji/LICENSE-GRAPHICS`。
+**署名**：图形来自 Google [Noto Emoji](https://github.com/googlefonts/noto-emoji) 的 3D 字型
+（`Noto-3D-Emoji-Fonts`），按 [SIL OFL 1.1](https://scripts.sil.org/OFL) 授权；
+许可证随资源放在 `apps/web/public/emoji3d/LICENSE`。
 
 ## 版本与更新日志
 

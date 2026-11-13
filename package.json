@@ -1,6 +1,6 @@
 {
   "name": "yejie",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "private": true,
   "scripts": {
     "dev": "npm --prefix apps/web run dev",
@@ -13,6 +13,6 @@
     "dev:watch": "node scripts/dev.mjs up --watch",
     "dev:status": "node scripts/dev.mjs status",
     "dev:restart": "node scripts/dev.mjs restart",
-    "emoji:sync": "node scripts/sync-emoji.mjs"
+    "emoji:sync": "node scripts/sync-emoji3d.mjs"
   }
 }

@@ -1,8 +1,8 @@
-// 评论表情：Twemoji 14.0.2 图形（CC-BY 4.0），资源在 public/emoji，
-// 由 scripts/sync-emoji.mjs 从参考资料同步，清单在 app/data/emoji.json。
+// 评论表情：Google Noto 3D 表情（字体 SIL OFL 1.1），资源在 public/emoji3d，
+// 由 scripts/sync-emoji3d.mjs 从参考资料里的字体导出，清单在 app/data/emoji.json。
 //
 // 为什么自托管：前端 CSP 的 img-src 只有 'self' data: blob: 与自有媒体源，
-// 直接引 cdn.jsdelivr 的 SVG 会被拦；自托管也不受第三方可用性影响。
+// 直接引第三方 CDN 会被拦；自托管也不受第三方可用性影响。
 
 import manifest from '~/data/emoji.json'
 
@@ -14,7 +14,7 @@ export interface EmojiCategory {
 
 export const emojiCategories: EmojiCategory[] = manifest.categories
 
-// Twemoji 的文件名是 code point 十六进制序列，变体选择符 FE0F 在文件名里省略。
+// 文件名是 code point 十六进制序列，变体选择符 FE0F 在文件名里省略。
 // 归一化比较还能让「❤」与「❤️」命中同一张图。
 const VARIATION_SELECTOR = /\uFE0F/g
 
@@ -24,7 +24,7 @@ function normalize(value: string): string {
 
 function fileName(char: string): string {
   const points = [...normalize(char)].map((part) => part.codePointAt(0)!.toString(16))
-  return `${points.join('-')}.svg`
+  return `${points.join('-')}.png`
 }
 
 const known = new Map<string, string>()
@@ -32,10 +32,10 @@ for (const category of emojiCategories) {
   for (const item of category.items) known.set(normalize(item), fileName(item))
 }
 
-/** 清单内表情返回同源 SVG 地址；清单外返回 null，调用方回落原字符。 */
+/** 清单内表情返回同源 PNG 地址；清单外返回 null，调用方回落原字符。 */
 export function emojiSrc(char: string): string | null {
   const name = known.get(normalize(char))
-  return name ? `/emoji/${name}` : null
+  return name ? `/emoji3d/${name}` : null
 }
 
 export interface EmojiPart {

@@ -307,7 +307,7 @@ function tokens(body: string): Token[] {
       result.push({ text: part, mention: true, emoji: false })
       continue
     }
-    // 普通片段再按表情切开：表情单独渲染成 Twemoji 图片，文字保持可选择。
+    // 普通片段再按表情切开：表情单独渲染成图片（public/emoji3d 下的 PNG），文字保持可选择。
     for (const piece of splitEmoji(part)) {
       result.push({ text: piece.value, mention: false, emoji: piece.type === 'emoji' })
     }
@@ -634,13 +634,13 @@ function isMine(item: { user_id: number; id: number }): boolean {
 .composer .pick.on { color: var(--vp-im-accent); }
 /* @ 提及仍是占位：可见但不可点，视觉上比输入框弱一档。 */
 .composer .pick:disabled { cursor: not-allowed; opacity: 0.72; }
-/* 评论里的表情图：与正文同高、基线对齐，不撑高行高。 */
+/* 评论里的表情图：略高于正文、基线对齐，不撑高行高（3D 图比线性图标需要更大尺寸）。 */
 .comment .emoji,
 .comment .body .emoji {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   margin: 0 1px;
-  vertical-align: -4px;
+  vertical-align: -5px;
   display: inline-block;
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// 评论表情面板：Twemoji 图形，按分类分页。选中后由父组件插入输入框。
-// 图形全部是同源 SVG（public/emoji），尺寸固定 24px，避免不同表情视觉大小不一。
+// 评论表情面板：Google Noto 3D 表情，按分类分页。选中后由父组件插入输入框。
+// 图形全部是同源 PNG（public/emoji3d，由 scripts/sync-emoji3d.mjs 导出），
+// 尺寸固定 26px，避免不同表情视觉大小不一；3D 渲染比线性图标需要更大的显示尺寸。
 const emit = defineEmits<{ pick: [value: string] }>()
 
 const active = ref(emojiCategories[0]?.key || '')
@@ -91,5 +92,5 @@ const current = computed(
   cursor: pointer;
 }
 .emoji-cell:hover { background: rgba(255, 255, 255, 0.1); }
-.emoji-cell img { width: 24px; height: 24px; display: block; }
+.emoji-cell img { width: 26px; height: 26px; display: block; }
 </style>
