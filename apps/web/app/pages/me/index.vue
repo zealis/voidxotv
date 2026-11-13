@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 「我」：个人主页（作品 / 喜欢 / 收藏 / 观看历史 / 稍后再看）卡片网格。
+// 「我」：个人主页（作品 / 喜欢 / 收藏 / 观看历史 / 晚点再看）卡片网格。
 // 私有页面：动态 SSR、禁止公共缓存、不参与索引。
 import { ApiError, errorMessage } from '~/composables/useApi'
 
@@ -90,7 +90,7 @@ const tabs: { key: ProfileTab; label: string; private: boolean }[] = [
   { key: 'likes', label: '喜欢', private: true },
   { key: 'favorites', label: '收藏', private: true },
   { key: 'history', label: '观看历史', private: true },
-  { key: 'watchlist', label: '稍后再看', private: true },
+  { key: 'watchlist', label: '晚点再看', private: true },
 ]
 
 const items = ref<ContentItem[]>([])
@@ -233,7 +233,7 @@ const cards = computed<Card[]>(() => {
 
 const searchPlaceholder = computed(() => ({
   works: '搜索我的作品', likes: '搜索你赞过的作品', favorites: '搜索你收藏的作品',
-  history: '搜索观看历史', watchlist: '搜索稍后再看',
+  history: '搜索观看历史', watchlist: '搜索晚点再看',
 })[tab.value])
 
 const emptyText = computed(() => ({
@@ -241,7 +241,7 @@ const emptyText = computed(() => ({
   likes: '还没有喜欢的作品，去沉浸流里点点看。',
   favorites: '还没有收藏的作品，看到喜欢的点右侧收藏。',
   history: '还没有观看记录，去看几条视频吧。',
-  watchlist: '稍后再看还是空的。',
+  watchlist: '晚点再看还是空的。',
 })[tab.value])
 
 function fromLibrary(item: LibraryItem): Card {

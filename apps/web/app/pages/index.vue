@@ -5,6 +5,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { FeedItem } from '~/composables/useFeed'
 import type { MediaWindow } from '~/composables/useImmersivePlayer'
 import { ApiError, errorMessage } from '~/composables/useApi'
+const { api } = useApi()
 
 const { list, detail, following, follow, avatar, tags, caption, formatCount } = useFeed()
 const { state, applyServer, setFollowing, toggleLike, toggleFavorite } = useInteractions()
@@ -58,6 +59,10 @@ function notify(message: string) {
 }
 
 const currentItem = computed<FeedItem | null>(() => items.value[current.value] || null)
+
+// 当前视频是否已放进「晚点再看」：接口是幂等 toggle，必须先知道初始状态，
+// 否则按钮文案永远显示「晚点再看」，第二次点击会把视频悄悄移出。
+const watchlisted = ref(false)
 
 // 底栏收起状态：视频跟随播放（播放收起、暂停恢复）；图片没有播放语义，
 // 默认收起保持沉浸，点画面可唤出（唤出后再点收起）。移动端由 CSS 断点忽略该状态。
@@ -115,6 +120,30 @@ async function onLike(item: FeedItem) {
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       openAuthDialog('login', { reason: '登录后即可点赞' })
+      return
+    }
+    notify(errorMessage(error))
+  }
+}
+
+async function loadWatchlisted(item: FeedItem, ticket: number) {
+  watchlisted.value = false
+  if (item.type !== 'video') return
+  try {
+    const data = await api<{ saved: boolean }>(`/api/v1/contents/${item.id}/watchlist`)
+    if (ticket !== activation) return
+    watchlisted.value = data.saved
+  } catch { /* 游客态：保持未加入，点击时会唤起登录弹窗 */ }
+}
+
+async function onWatchLater(item: FeedItem) {
+  try {
+    const data = await api<{ saved: boolean }>(`/api/v1/contents/${item.id}/watchlist`, { method: 'POST' })
+    watchlisted.value = data.saved
+    notify(data.saved ? '已放入晚点再看' : '已从晚点再看移除')
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      openAuthDialog('login', { reason: '登录后即可把视频放进晚点再看' })
       return
     }
     notify(errorMessage(error))
@@ -191,6 +220,7 @@ async function activateCurrent() {
   const slot = root?.querySelector<HTMLElement>(`[data-feed-index="${current.value}"] .media-slot`)
   player.attach(slot || null)
   await player.load(active)
+  void loadWatchlisted(active, ticket)
   // 当前条目已就位，再铺开预载窗口：先播当前，后台慢速补周边。
   player.prepare(items.value, current.value, mediaWindow())
   preloadNeighbours()
@@ -360,12 +390,13 @@ onBeforeUnmount(() => {
           :following="state(item.slug).following"
           :counts="item.stats" :label="formatCount" :player="player.state"
           :caption="caption(item.description)" :tags="tags(item.description)"
-          :expanded="expanded"
+          :expanded="expanded" :watchlisted="watchlisted"
           :autoplay="barAutoplay" :clear-ui="barClear" :nav-hidden="chromeCollapsed"
           @toggle="player.toggle()" @like="onLike(item)"
           @toggle-chrome="toggleImageChrome"
           @comment="sheetOpen = true" @favorite="onFavorite(item)"
           @share="onShare(item)" @follow="onFollow(item)" @report="reportOpen = true"
+          @watch-later="onWatchLater(item)"
           @expand="expanded = !expanded" @unmute="player.setMuted(false)"
           @seek="player.seekRatio($event)"
           @rate="player.setRate($event)" @level="player.setLevel($event)"

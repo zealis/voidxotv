@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 右侧操作栏（UI 规范 §6.2）：圆形玻璃底仅用于按钮，头像使用实色描边。
-// 低频的「举报」收进分享下方三个点的菜单，避免操作栏被次要动作拉长。
+// 低频的「晚点再看」与「举报」收进分享下方三个点的菜单，避免操作栏被次要动作拉长。
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { FeedItem } from '~/composables/useFeed'
 
@@ -10,6 +10,8 @@ const props = defineProps<{
   liked: boolean
   favorited: boolean
   following: boolean
+  /** 当前视频是否已放进「晚点再看」，驱动菜单项的图标与文案。 */
+  watchlisted?: boolean
   counts: { likes: number; comments: number; favorites: number; shares: number }
   label: (value: number) => string
 }>()
@@ -20,12 +22,14 @@ const emit = defineEmits<{
   favorite: []
   share: []
   follow: []
+  watchLater: []
   report: []
 }>()
 
 const moreOpen = ref(false)
 const moreWrap = ref<HTMLElement | null>(null)
 const moreButton = ref<HTMLButtonElement | null>(null)
+const watchLaterItem = ref<HTMLButtonElement | null>(null)
 const reportItem = ref<HTMLButtonElement | null>(null)
 
 function closeMore(restoreFocus = false) {
@@ -36,6 +40,11 @@ function closeMore(restoreFocus = false) {
 
 function toggleMore() {
   moreOpen.value = !moreOpen.value
+}
+
+function onWatchLater() {
+  closeMore()
+  emit('watchLater')
 }
 
 function onReport() {
@@ -65,7 +74,8 @@ watch(moreOpen, async (open) => {
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('keydown', onKeydown, true)
     await nextTick()
-    if (moreOpen.value) reportItem.value?.focus()
+    // 视频条目第一项是「晚点再看」，图集没有该项时回落到「举报」。
+    if (moreOpen.value) (watchLaterItem.value ?? reportItem.value)?.focus()
   } else {
     document.removeEventListener('pointerdown', onPointerDown, true)
     document.removeEventListener('keydown', onKeydown, true)
@@ -118,7 +128,7 @@ onBeforeUnmount(() => {
       <span class="bubble"><ImIcon name="share" :size="24" filled /></span>
       <span class="count">{{ props.label(props.counts.shares) }}</span>
     </button>
-    <!-- 更多操作：分享下方的三个点，举报收进菜单（§9.5 的处置链路不变）。 -->
+    <!-- 更多操作：分享下方的三个点，低频动作收进菜单（§9.5 的举报链路不变）。 -->
     <div ref="moreWrap" class="more-wrap" @focusout="onFocusOut">
       <button
         ref="moreButton" type="button" class="action" :class="{ 'more-on': moreOpen }"
@@ -132,6 +142,15 @@ onBeforeUnmount(() => {
         <span class="count" aria-hidden="true">&nbsp;</span>
       </button>
       <div v-if="moreOpen" class="more-menu" role="menu" aria-label="更多操作">
+        <!-- 只有视频能放进「晚点再看」；图集条目不显示这一项。 -->
+        <button
+          v-if="props.item.type === 'video'"
+          ref="watchLaterItem" type="button" class="more-item" role="menuitem"
+          :aria-pressed="!!props.watchlisted" @click="onWatchLater"
+        >
+          <ImIcon :name="props.watchlisted ? 'check' : 'clock'" :size="18" />
+          <span>{{ props.watchlisted ? '已在晚点再看' : '晚点再看' }}</span>
+        </button>
         <button
           ref="reportItem" type="button" class="more-item" role="menuitem" @click="onReport"
         >

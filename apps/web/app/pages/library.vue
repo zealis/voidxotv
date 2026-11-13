@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 个人库（§4.1 /library）：历史（续播）/ 收藏 / 稍后再看 三个分区。
-// 收藏复用 reactions(kind='favorite') 的 /me/favorites；历史与稍后再看是独立表。
+// 个人库（§4.1 /library）：历史（续播）/ 收藏 / 晚点再看 三个分区。
+// 收藏复用 reactions(kind='favorite') 的 /me/favorites；历史与晚点再看是独立表。
 import { ApiError, errorMessage } from '~/composables/useApi'
 
 const { open: openAuthDialog } = useAuthDialog()
@@ -12,7 +12,7 @@ type TabKey = 'history' | 'favorites' | 'watchlist'
 const TABS: { key: TabKey; label: string; empty: string }[] = [
   { key: 'history', label: '历史', empty: '还没有观看记录' },
   { key: 'favorites', label: '收藏', empty: '还没有收藏的作品' },
-  { key: 'watchlist', label: '稍后再看', empty: '稍后再看列表是空的' },
+  { key: 'watchlist', label: '晚点再看', empty: '晚点再看列表是空的' },
 ]
 
 interface LibraryCard {
@@ -21,7 +21,7 @@ interface LibraryCard {
   type: 'video' | 'image'
   title: string
   author_handle: string
-  /** 历史 / 稍后再看接口返回的封面地址（图集首图或视频 poster）。 */
+  /** 历史 / 晚点再看接口返回的封面地址（图集首图或视频 poster）。 */
   poster_url?: string
   position_ms?: number
   duration_ms?: number
@@ -137,7 +137,7 @@ onMounted(async () => {
     <p v-if="checking" class="hint">正在检查登录状态…</p>
 
     <section v-else-if="needLogin" class="gate">
-      <p>登录后查看历史、收藏与稍后再看。</p>
+      <p>登录后查看历史、收藏与晚点再看。</p>
       <button type="button" class="cta" @click="openAuthDialog()">登录</button>
     </section>
 
@@ -147,14 +147,14 @@ onMounted(async () => {
       :empty-title="TABS.find((t) => t.key === active)!.empty"
       :empty-hint="active === 'history' ? '看过的视频会出现在这里，并支持续播。'
         : active === 'favorites' ? '在沉浸流里点收藏，作品会出现在这里。'
-        : '在作品详情页点「稍后再看」，把想看的存起来。'"
+        : '在视频的「更多」里点「晚点再看」，白天存下来晚上慢慢看。'"
       @retry="load"
     >
       <ul v-if="items.length" class="list">
         <li v-for="item in items" :key="item.slug">
           <NuxtLink :to="linkOf(item)" class="card">
             <div class="cover">
-              <!-- 历史 / 稍后再看走 poster_url，收藏沿用 media.poster_url。 -->
+              <!-- 历史 / 晚点再看走 poster_url，收藏沿用 media.poster_url。 -->
               <img
                 v-if="item.poster_url || item.media?.poster_url"
                 :src="item.poster_url || item.media?.poster_url" alt="" loading="lazy"

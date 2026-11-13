@@ -41,6 +41,8 @@ const props = defineProps<{
   clearUi?: boolean
   /** 底栏是否收起：收起时控制条贴到屏幕底部，避免下方留一条空区。 */
   navHidden?: boolean
+  /** 当前视频是否已放进「晚点再看」。 */
+  watchlisted?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -50,6 +52,7 @@ const emit = defineEmits<{
   favorite: []
   share: []
   follow: []
+  watchLater: []
   report: []
   expand: []
   retry: []
@@ -466,9 +469,11 @@ function onSeek(event: MouseEvent) {
       v-if="props.active && !props.clearUi"
       :item="props.item" :avatar="props.avatar"
       :liked="props.liked" :favorited="props.favorited" :following="props.following"
+      :watchlisted="props.watchlisted"
       :counts="props.counts" :label="props.label"
       @like="emit('like')" @comment="emit('comment')" @favorite="emit('favorite')"
-      @share="emit('share')" @follow="emit('follow')" @report="emit('report')"
+      @share="emit('share')" @follow="emit('follow')"
+      @watch-later="emit('watchLater')" @report="emit('report')"
     />
 
     <InfoLayer

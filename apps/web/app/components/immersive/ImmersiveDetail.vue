@@ -164,7 +164,7 @@ async function loadWatchlist() {
 }
 
 // 互动状态（§6.2）：SSR 详情取数不带查看者会话，挂载后按会话补一次服务端真相
-// （点赞 / 收藏标记 + 真实计数），与稍后再看的取数口径一致。
+// （点赞 / 收藏标记 + 真实计数），与晚点再看的取数口径一致。
 async function loadReactions() {
   if (!item.value) return
   try {
@@ -181,9 +181,12 @@ async function toggleWatchlist() {
   try {
     const data = await api<{ saved: boolean }>(`/api/v1/contents/${item.value.id}/watchlist`, { method: 'POST' })
     watchlisted.value = data.saved
-    notify(data.saved ? '已加入稍后再看' : '已从稍后再看移除')
+    notify(data.saved ? '已放入晚点再看' : '已从晚点再看移除')
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) notify('登录后可使用稍后再看')
+    if (error instanceof ApiError && error.status === 401) {
+      openAuthDialog('login', { reason: '登录后即可把视频放进晚点再看' })
+      return
+    }
     else notify(errorMessage(error))
   }
 }
@@ -274,11 +277,12 @@ onBeforeUnmount(() => {
             :following="state(item.slug).following"
             :counts="item.stats" :label="formatCount" :player="player.state"
             :caption="caption(item.description)" :tags="tags(item.description)"
-            :expanded="expanded" :nav-hidden="chromeCollapsed"
+            :expanded="expanded" :nav-hidden="chromeCollapsed" :watchlisted="watchlisted"
             @toggle="player.toggle()" @like="onLike(item)"
             @toggle-chrome="toggleImageChrome"
             @comment="sheetOpen = true" @favorite="onFavorite(item)"
             @share="notify('深链接：' + deepLink)" @follow="toggleFollow(item.slug)" @report="reportOpen = true"
+            @watch-later="toggleWatchlist"
             @expand="expanded = !expanded" @unmute="player.setMuted(false)"
             @seek="player.seekRatio($event)"
             @rate="player.setRate($event)" @level="player.setLevel($event)"
@@ -316,7 +320,7 @@ onBeforeUnmount(() => {
         class="watchlist vp-glass vp-glass-compact"
         :aria-pressed="watchlisted"
         @click="toggleWatchlist"
-      >{{ watchlisted ? '已在稍后再看' : '稍后再看' }}</button>
+      >{{ watchlisted ? '已在晚点再看' : '晚点再看' }}</button>
 
       <div v-if="toast" class="toast vp-glass vp-glass-compact" role="status">{{ toast }}</div>
     </template>
