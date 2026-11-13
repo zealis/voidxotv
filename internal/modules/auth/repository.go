@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,13 +23,18 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-func (r *Repository) CreateUser(ctx context.Context, handle, email, passwordHash string) (User, error) {
+// CreateUser 用 CTE 先取序列值再插入：夜街号就是用户 ID，所以 handle 与
+// display_name（「用户 + 夜街号」）必须在 INSERT 时就能拿到新 ID，
+// 否则要先插临时 handle 再回写，多一次往返还可能撞唯一索引。
+func (r *Repository) CreateUser(ctx context.Context, email, passwordHash string) (User, error) {
 	const query = `
-		INSERT INTO users (handle, email, password_hash)
-		VALUES ($1, $2, $3)
+		WITH new_id AS (SELECT nextval('users_id_seq') AS id)
+		INSERT INTO users (id, handle, email, password_hash, display_name)
+		OVERRIDING SYSTEM VALUE
+		SELECT id, id::text, $1, $2, '用户' || id FROM new_id
 		RETURNING id, handle, COALESCE(email, ''), password_hash, role, status, created_at`
 	var user User
-	err := r.db.QueryRow(ctx, query, handle, nullable(email), passwordHash).Scan(
+	err := r.db.QueryRow(ctx, query, email, passwordHash).Scan(
 		&user.ID, &user.Handle, &user.Email, &user.PasswordHash, &user.Role, &user.Status, &user.CreatedAt,
 	)
 	if err != nil {
@@ -40,6 +44,17 @@ func (r *Repository) CreateUser(ctx context.Context, handle, email, passwordHash
 		return User{}, fmt.Errorf("create user: %w", err)
 	}
 	return user, nil
+}
+
+// FindByAccount 按邮箱找账号；邮箱不匹配时回落到 handle（纯数字夜街号），
+// 兼容后台脚本、curl 与旧客户端。已登录用户的 email 为 NULL 时只可能走 handle。
+func (r *Repository) FindByAccount(ctx context.Context, account string) (User, error) {
+	const query = `
+		SELECT id, handle, COALESCE(email, ''), password_hash, role, status, created_at
+		FROM users WHERE email = $1 OR handle = $1
+		ORDER BY (email = $1) DESC
+		LIMIT 1`
+	return r.scanUser(r.db.QueryRow(ctx, query, account))
 }
 
 func (r *Repository) FindByHandle(ctx context.Context, handle string) (User, error) {
@@ -103,13 +118,6 @@ func (r *Repository) SetDefaultAvatarKey(ctx context.Context, userID int64, key 
 		return false, fmt.Errorf("auth: set default avatar: %w", err)
 	}
 	return tag.RowsAffected() > 0, nil
-}
-
-func nullable(value string) any {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	return strings.TrimSpace(value)
 }
 
 func isUniqueViolation(err error) bool {

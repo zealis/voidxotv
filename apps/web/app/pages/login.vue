@@ -4,12 +4,14 @@ useSeoMeta({ robots: 'noindex,nofollow' })
 const { api, clearCsrf } = useApi()
 
 const mode = ref<'login' | 'register'>('login')
-const handle = ref('')
 const email = ref('')
 const password = ref('')
 const busy = ref(false)
 const errorText = ref('')
 const route = useRoute()
+
+// 登录只认「邮箱 + 密码」；夜街号（= 用户 ID）与默认昵称由服务端生成。
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 // 登录后回到来源页：消息中心、草稿箱、设置等 7 处入口都带 redirect。
 // 只接受站内绝对路径（单斜杠开头），挡掉 //evil.com 与 /\evil.com 这类开放重定向。
@@ -24,9 +26,9 @@ function redirectTarget(): string {
 
 async function submit() {
   errorText.value = ''
-  const name = handle.value.trim()
-  if (!/^[a-zA-Z0-9_]{3,32}$/.test(name)) {
-    errorText.value = '账号需为 3–32 位字母、数字或下划线'
+  const account = email.value.trim().toLowerCase()
+  if (!EMAIL_PATTERN.test(account)) {
+    errorText.value = '请输入有效的邮箱地址'
     return
   }
   if (password.value.length < 8) {
@@ -38,13 +40,13 @@ async function submit() {
     if (mode.value === 'register') {
       await api('/api/v1/auth/register', {
         method: 'POST',
-        body: { handle: name, password: password.value, email: email.value.trim() || undefined },
+        body: { email: account, password: password.value },
       })
     }
     clearCsrf()
     await api('/api/v1/auth/login', {
       method: 'POST',
-      body: { handle: name, password: password.value, device_id: 'web-publish' },
+      body: { email: account, password: password.value, device_id: 'web-publish' },
     })
     await navigateTo(redirectTarget())
   } catch (error) {
@@ -73,16 +75,16 @@ async function submit() {
 
       <form @submit.prevent="submit">
         <label>
-          <span>账号</span>
-          <input v-model="handle" autocomplete="username" placeholder="yejie_creator" />
-        </label>
-        <label v-if="mode === 'register'">
-          <span>邮箱（可选）</span>
-          <input v-model="email" type="email" autocomplete="email" placeholder="you@example.com" />
+          <span>邮箱</span>
+          <input v-model="email" type="email" inputmode="email" autocomplete="username" placeholder="you@example.com" />
         </label>
         <label>
           <span>密码</span>
-          <input v-model="password" type="password" autocomplete="current-password" placeholder="至少 8 位" />
+          <input
+            v-model="password" type="password"
+            :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
+            placeholder="至少 8 位"
+          />
         </label>
 
         <p v-if="errorText" class="error" role="alert">{{ errorText }}</p>

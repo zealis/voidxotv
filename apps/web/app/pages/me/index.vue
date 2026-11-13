@@ -418,7 +418,7 @@ async function submitAppeal() {
               </NuxtLink>
             </div>
 
-            <p class="handle">夜街号：@{{ profile.handle }}</p>
+            <p class="handle">夜街号 {{ profile.handle }}</p>
             <p v-if="profile.bio" class="bio">{{ profile.bio }}</p>
 
             <div class="chips">

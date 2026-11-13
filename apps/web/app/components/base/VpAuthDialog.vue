@@ -6,22 +6,22 @@ const { api, clearCsrf } = useApi()
 const { state, setMode, close } = useAuthDialog()
 const route = useRoute()
 
-const handle = ref('')
 const email = ref('')
 const password = ref('')
 const busy = ref(false)
 const errorText = ref('')
 
-// 关闭时清掉密码与错误，账号保留方便再次打开（用户可能在试自己的小号）。
+// 登录只认「邮箱 + 密码」；夜街号由服务端生成（= 用户 ID），不再让用户起账号。
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// 关闭时清掉密码与错误，邮箱保留方便再次打开。
 watch(() => state.value.open, (open) => {
   errorText.value = ''
   if (!open) password.value = ''
 })
 
 function validate(): string {
-  if (!/^[a-zA-Z0-9_]{3,32}$/.test(handle.value.trim())) {
-    return '账号需为 3–32 位字母、数字或下划线'
-  }
+  if (!EMAIL_PATTERN.test(email.value.trim())) return '请输入有效的邮箱地址'
   if (password.value.length < 8) return '密码至少 8 位'
   return ''
 }
@@ -33,19 +33,19 @@ async function submit() {
     errorText.value = invalid
     return
   }
-  const name = handle.value.trim()
+  const account = email.value.trim().toLowerCase()
   busy.value = true
   try {
     if (state.value.mode === 'register') {
       await api('/api/v1/auth/register', {
         method: 'POST',
-        body: { handle: name, password: password.value, email: email.value.trim() || undefined },
+        body: { email: account, password: password.value },
       })
     }
     clearCsrf()
     await api('/api/v1/auth/login', {
       method: 'POST',
-      body: { handle: name, password: password.value, device_id: 'web' },
+      body: { email: account, password: password.value, device_id: 'web' },
     })
     const target = state.value.redirect
     close()
@@ -88,12 +88,11 @@ function goReset() {
 
     <form @submit.prevent="submit">
       <label class="field">
-        <span>账号</span>
-        <input v-model="handle" autocomplete="username" placeholder="3–32 位字母、数字或下划线" />
-      </label>
-      <label v-if="state.mode === 'register'" class="field">
-        <span>邮箱（可选）</span>
-        <input v-model="email" type="email" autocomplete="email" placeholder="用于找回密码" />
+        <span>邮箱</span>
+        <input
+          v-model="email" type="email" inputmode="email" autocomplete="username"
+          placeholder="you@example.com"
+        />
       </label>
       <label class="field">
         <span>密码</span>

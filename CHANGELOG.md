@@ -39,6 +39,44 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.14.0] - 2026-11-13
+
+### 新增
+
+- **登录 / 注册改为「邮箱 + 密码」**：弹窗、`/login` 页、找回密码页都不再要求填账号；
+  注册表单只有邮箱与密码两栏。邮箱统一小写存储与查询，`A@x.com` 注册、`a@x.com` 登录可命中。
+- **夜街号 = 用户 ID**：注册时用序列值直接生成 `handle`（纯数字）与默认昵称
+  「用户 + 夜街号」，不再让用户起英文账号。新用户注册后「我」页显示「用户343 / 夜街号 343」。
+- 沉浸流作者名改为显示昵称（`feed.Author` 新增 `display_name`）：夜街号是纯数字后，
+  `@340` 认不出是谁，而昵称可被用户在设置页修改，不能用前端拼「用户+号」代替。
+
+### 重构
+
+- `auth.Repository.CreateUser` 改用一个 CTE 取 `nextval('users_id_seq')` 再
+  `OVERRIDING SYSTEM VALUE` 插入：`id`、`handle`、`display_name` 在同一语句里落定，
+  避免「先插临时 handle 再回写」的两次往返与唯一索引冲突。
+- `auth.Service.Login` 按 `Account` 查询：先匹配邮箱，未命中回落到 handle，
+  保留纯数字夜街号登录（后台脚本、curl、既有 e2e 不必立即改）。
+- 找回密码两阶段都改成只按邮箱查（`LookupResetTarget(email)`），删掉 `trimHandle`
+  与 `handlePattern`；响应文案改为「如果这个邮箱已注册，验证码邮件已发出」。
+
+### 改进
+
+- 资料类位置统一显示「夜街号 N」（「我」页、创作者页、设置页、发布页），
+  去掉 `@` 前缀——数字号不是用户名。创作者页标题与 SEO 描述同步。
+- `internal/modules/auth` 注册校验用例改为邮箱维度（缺邮箱 / 非法邮箱 / 弱密码）。
+- 迁移 `000015_numeric_handle`：存量英文 handle 统一改成 `id` 的字符串形式，
+  `display_name` 为空的补成「用户 + 夜街号」，没有邮箱的早期调试账号补占位邮箱
+  （否则登录只认邮箱后该账号永久无法登录）。
+
+### 不兼容
+
+- `POST /api/v1/auth/register` 只接受 `{email, password}`，`handle` 字段被忽略；
+  `POST /api/v1/auth/login` 以 `email` 为准（仍兼容 `account` / `handle` 字段）。
+- 用户 `handle` 变为纯数字：`/creator/{handle}` 链接、关注接口、所有返回作者标识的
+  接口（`author.handle`、`author_handle`）里的值都是数字，不再是可读英文名。
+- 存量账号的英文 handle **已不可恢复**（迁移覆盖原值，备份见 `data/backup/`，不入库）。
+
 ## [0.13.0] - 2026-11-13
 
 ### 新增

@@ -15,7 +15,6 @@ import (
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidHandle      = errors.New("invalid handle")
 	ErrWeakPassword       = errors.New("password too short")
 	ErrInvalidEmail       = errors.New("invalid email")
 	ErrRateLimited        = errors.New("too many login attempts")
@@ -23,7 +22,14 @@ var (
 	ErrAccountDisabled    = errors.New("account disabled")
 )
 
-var handlePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{3,32}$`)
+// 登录只认邮箱，格式校验放在服务层，避免 handler 与 service 两套规则。
+var emailPattern = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+// NormalizeEmail 统一邮箱形态（去空格、小写）：注册写入与登录查询必须用同一规则，
+// 否则 `A@x.com` 注册、`a@x.com` 登录会查不到（唯一索引本身区分大小写）。
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
 
 // Service implements registration, login, authentication and logout.
 type Service struct {
@@ -45,33 +51,31 @@ func NewService(repo *Repository, sessions *SessionStore, limiter *LoginLimiter,
 	return &Service{repo: repo, sessions: sessions, limiter: limiter, cfg: cfg, log: log, dummyHash: dummy}
 }
 
+// RegisterInput 只需要邮箱与密码：夜街号（= 用户 ID）与默认昵称由数据库生成。
 type RegisterInput struct {
-	Handle   string
 	Email    string
 	Password string
 }
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (User, error) {
-	input.Handle = strings.TrimSpace(input.Handle)
-	input.Email = strings.TrimSpace(input.Email)
-	if !handlePattern.MatchString(input.Handle) {
-		return User{}, ErrInvalidHandle
+	email := NormalizeEmail(input.Email)
+	if len(email) == 0 || len(email) > 254 || !emailPattern.MatchString(email) {
+		return User{}, ErrInvalidEmail
 	}
 	if utf8.RuneCountInString(input.Password) < 8 {
 		return User{}, ErrWeakPassword
-	}
-	if input.Email != "" && (!strings.Contains(input.Email, "@") || len(input.Email) > 254) {
-		return User{}, ErrInvalidEmail
 	}
 	hash, err := HashPassword(input.Password)
 	if err != nil {
 		return User{}, fmt.Errorf("hash password: %w", err)
 	}
-	return s.repo.CreateUser(ctx, input.Handle, input.Email, hash)
+	return s.repo.CreateUser(ctx, email, hash)
 }
 
 type LoginInput struct {
-	Handle    string
+	// Account 是登录标识：前台只提交邮箱；同时接受纯数字夜街号，
+	// 让后台脚本与既有调用方（curl、e2e）不必立即跟着改。
+	Account   string
 	Password  string
 	DeviceID  string
 	IPAddress string
@@ -79,15 +83,15 @@ type LoginInput struct {
 }
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (string, User, error) {
-	input.Handle = strings.TrimSpace(input.Handle)
-	allowed, err := s.limiter.Allow(ctx, input.Handle+"|"+input.IPAddress)
+	account := NormalizeEmail(input.Account)
+	allowed, err := s.limiter.Allow(ctx, account+"|"+input.IPAddress)
 	if err != nil {
 		return "", User{}, ErrUnauthorized // Redis failure is fail-closed
 	}
 	if !allowed {
 		return "", User{}, ErrRateLimited
 	}
-	user, err := s.repo.FindByHandle(ctx, input.Handle)
+	user, err := s.repo.FindByAccount(ctx, account)
 	if errors.Is(err, ErrUserNotFound) {
 		_, _ = VerifyPassword(s.dummyHash, input.Password)
 		return "", User{}, ErrInvalidCredentials

@@ -83,10 +83,10 @@ if (error.value || !profile.value) {
 // canonical 按请求头推导公开 origin（代理/CDN 后仍正确）。
 const site = useSiteOrigin()
 useSeoMeta({
-  title: () => `${profile.value?.display_name || '@' + handle.value} · 夜街`,
-  description: () => `@${handle.value} 在夜街发布的公开作品，共 ${profile.value?.content_count || 0} 条。`,
-  ogTitle: () => `${profile.value?.display_name || '@' + handle.value} · 夜街`,
-  ogDescription: () => `@${handle.value} 的公开作品`,
+  title: () => `${profile.value?.display_name || '用户' + handle.value} · 夜街`,
+  description: () => `夜街号 ${handle.value} 的公开作品，共 ${profile.value?.content_count || 0} 条。`,
+  ogTitle: () => `${profile.value?.display_name || '用户' + handle.value} · 夜街`,
+  ogDescription: () => `夜街号 ${handle.value} 的公开作品`,
   ogImage: () => profile.value?.avatar_url || '',
   robots: 'index,follow',
 })
@@ -103,8 +103,8 @@ useHead({
         <span v-else>{{ handle.slice(0, 1).toUpperCase() }}</span>
       </div>
       <div class="identity">
-        <h1>{{ profile?.display_name || `@${handle}` }}</h1>
-        <p class="handle">@{{ handle }}</p>
+        <h1>{{ profile?.display_name || `用户${handle}` }}</h1>
+        <p class="handle">夜街号 {{ handle }}</p>
         <p v-if="profile?.bio" class="bio">{{ profile.bio }}</p>
         <p class="stats">
           <span>{{ profile?.content_count || 0 }} 作品</span>

@@ -478,7 +478,7 @@ function onSeek(event: MouseEvent) {
 
     <InfoLayer
       v-if="props.active && !props.clearUi"
-      :handle="props.item.author.handle" :caption="props.caption"
+      :author="props.item.author.display_name || `用户${props.item.author.handle}`" :caption="props.caption"
       :tags="props.tags" :expanded="props.expanded" :poi="props.item.poi"
       :danmaku="props.item.type === 'video'"
       @toggle-expand="emit('expand')"

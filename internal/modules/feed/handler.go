@@ -292,7 +292,7 @@ func (h *Handler) compose(ctx context.Context, entry row, full bool) (Item, erro
 	item := Item{
 		ID: entry.ID, Slug: entry.Slug, Type: entry.Type,
 		Title: entry.Title, Description: entry.Description,
-		Author:      Author{ID: entry.AuthorID, Handle: entry.Handle},
+		Author:      Author{ID: entry.AuthorID, Handle: entry.Handle, DisplayName: entry.DisplayName},
 		PublishedAt: entry.PublishedAt,
 	}
 	// 详情才带位置信息（§8 发布设置）：列表不查，省一次 join；图集与视频都要。

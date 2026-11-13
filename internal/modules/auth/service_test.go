@@ -13,10 +13,9 @@ func TestRegisterValidation(t *testing.T) {
 		input RegisterInput
 		want  error
 	}{
-		{"short handle", RegisterInput{Handle: "ab", Password: "password123"}, ErrInvalidHandle},
-		{"bad handle chars", RegisterInput{Handle: "bad handle", Password: "password123"}, ErrInvalidHandle},
-		{"short password", RegisterInput{Handle: "alice", Password: "1234567"}, ErrWeakPassword},
-		{"bad email", RegisterInput{Handle: "alice", Password: "password123", Email: "nope"}, ErrInvalidEmail},
+		{"missing email", RegisterInput{Password: "password123"}, ErrInvalidEmail},
+		{"bad email", RegisterInput{Email: "nope", Password: "password123"}, ErrInvalidEmail},
+		{"short password", RegisterInput{Email: "alice@example.com", Password: "1234567"}, ErrWeakPassword},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

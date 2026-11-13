@@ -2,6 +2,8 @@
 export interface FeedAuthor {
   id: number
   handle: string
+  // 默认昵称「用户 + 夜街号」：夜街号是纯数字，只显示 @340 认不出是谁。
+  display_name?: string
   avatar_url?: string
 }
 

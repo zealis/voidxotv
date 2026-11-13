@@ -14,9 +14,10 @@ import (
 var ErrNoPlayableSource = errors.New("feed: no playable media source")
 
 type Author struct {
-	ID        int64  `json:"id"`
-	Handle    string `json:"handle"`
-	AvatarURL string `json:"avatar_url,omitempty"`
+	ID          int64  `json:"id"`
+	Handle      string `json:"handle"`
+	DisplayName string `json:"display_name,omitempty"`
+	AvatarURL   string `json:"avatar_url,omitempty"`
 }
 
 // Stats 是 compose 实时查出的真实互动计数（reactions / comments，§6.2 角标口径）。

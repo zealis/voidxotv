@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// 找回密码（§11.7）：两步——账号+邮箱申请验证码邮件；验证码+新密码完成重置。
+// 找回密码（§11.7）：两步——邮箱申请验证码邮件；验证码+新密码完成重置。
+// 登录改成「邮箱 + 密码」后不再要求填夜街号（用户也记不住那串数字）。
 // 同一 IP 24 小时 3 次上限，超限需图形验证码；验证码 3 小时有效、最多验证 20 次。
 // 需要注意：SMTP 未配置时验证码邮件不会发出（死信留原因），页面会提示联系管理员。
 useSeoMeta({ title: '找回密码 · 夜街', robots: 'noindex,nofollow' })
@@ -9,7 +10,6 @@ const { api } = useApi()
 const { open: openAuthDialog } = useAuthDialog()
 
 const step = ref<'request' | 'confirm' | 'done'>('request')
-const handle = ref('')
 const email = ref('')
 const code = ref('')
 const next = ref('')
@@ -31,8 +31,8 @@ async function loadCaptcha() {
 
 async function requestCode() {
   errorText.value = ''
-  if (handle.value.trim().length < 3 || !email.value.includes('@')) {
-    errorText.value = '请输入账号和注册时使用的邮箱'
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
+    errorText.value = '请输入注册时使用的邮箱'
     return
   }
   busy.value = true
@@ -40,8 +40,7 @@ async function requestCode() {
     const data = await api<{ message: string }>('/api/v1/auth/password/reset-request', {
       method: 'POST',
       body: {
-        handle: handle.value.trim(),
-        email: email.value.trim(),
+        email: email.value.trim().toLowerCase(),
         captcha_id: captcha.value?.id || undefined,
         captcha_answer: captchaAnswer.value || undefined,
       },
@@ -70,8 +69,7 @@ async function confirmReset() {
     await api('/api/v1/auth/password/reset', {
       method: 'POST',
       body: {
-        handle: handle.value.trim(),
-        email: email.value.trim(),
+        email: email.value.trim().toLowerCase(),
         code: code.value.trim(),
         new_password: next.value,
       },
@@ -95,15 +93,11 @@ async function confirmReset() {
 
       <template v-if="step === 'request'">
         <h1>第一步 · 验证身份</h1>
-        <p class="hint">输入账号与注册邮箱，我们会发送 6 位验证码（3 小时内有效）。</p>
+        <p class="hint">输入注册邮箱，我们会发送 6 位验证码（3 小时内有效）。</p>
         <form @submit.prevent="requestCode">
           <label>
-            <span>账号</span>
-            <input v-model="handle" autocomplete="username" placeholder="yejie_creator" />
-          </label>
-          <label>
             <span>注册邮箱</span>
-            <input v-model="email" type="email" autocomplete="email" placeholder="you@example.com" />
+            <input v-model="email" type="email" inputmode="email" autocomplete="username" placeholder="you@example.com" />
           </label>
           <template v-if="captcha">
             <label>

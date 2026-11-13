@@ -83,8 +83,8 @@ func (h *Handler) avatarPreview(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
+// registerRequest 只收邮箱与密码：夜街号与默认昵称由服务端生成。
 type registerRequest struct {
-	Handle   string `json:"handle"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
@@ -96,7 +96,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := h.svc.Register(r.Context(), RegisterInput{
-		Handle: request.Handle, Email: request.Email, Password: request.Password,
+		Email: request.Email, Password: request.Password,
 	})
 	if err != nil {
 		h.writeError(w, r, err)
@@ -117,7 +117,9 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 }
 
 type loginRequest struct {
-	Handle   string `json:"handle"`
+	Email    string `json:"email"`
+	Account  string `json:"account"`
+	Handle   string `json:"handle"` // 旧字段：前台已不再发送，保留给 curl / 既有脚本
 	Password string `json:"password"`
 	DeviceID string `json:"device_id"`
 }
@@ -128,8 +130,15 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
+	account := request.Email
+	if account == "" {
+		account = request.Account
+	}
+	if account == "" {
+		account = request.Handle
+	}
 	token, user, err := h.svc.Login(r.Context(), LoginInput{
-		Handle:    request.Handle,
+		Account:   account,
 		Password:  request.Password,
 		DeviceID:  request.DeviceID,
 		IPAddress: clientIP(r),
@@ -231,13 +240,13 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	status := http.StatusInternalServerError
 	code, message := "internal_error", "unexpected server error"
 	switch {
-	case errors.Is(err, ErrInvalidHandle), errors.Is(err, ErrWeakPassword),
+	case errors.Is(err, ErrWeakPassword),
 		errors.Is(err, ErrInvalidEmail), errors.Is(err, httpserver.ErrInvalidJSON):
 		status, code, message = http.StatusBadRequest, "invalid_input", err.Error()
 	case errors.Is(err, ErrUserExists):
-		status, code, message = http.StatusConflict, "user_exists", "handle or email already registered"
+		status, code, message = http.StatusConflict, "user_exists", "email already registered"
 	case errors.Is(err, ErrInvalidCredentials):
-		status, code, message = http.StatusUnauthorized, "invalid_credentials", "invalid handle or password"
+		status, code, message = http.StatusUnauthorized, "invalid_credentials", "email or password is incorrect"
 	case errors.Is(err, ErrAccountDisabled):
 		status, code, message = http.StatusForbidden, "account_disabled", "account is not active"
 	case errors.Is(err, ErrRateLimited):

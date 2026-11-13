@@ -182,20 +182,21 @@ func captchaSVG(question string) string {
 
 // ── 用户资料 / 密码的仓储补充 ─────────────────────────────────────
 
-// LookupResetTarget 按 handle + email 找找回密码的对象；email 不匹配视为未知（不泄露存在性）。
-func (r *Repository) LookupResetTarget(ctx context.Context, handle, email string) (int64, string, error) {
+// LookupResetTarget 按邮箱找找回密码的对象；邮箱不存在视为未知（不泄露存在性）。
+// 登录体系改成「邮箱 + 密码」后，用户不再需要记住或填写夜街号。
+func (r *Repository) LookupResetTarget(ctx context.Context, email string) (int64, string, error) {
 	var userID int64
 	var stored string
 	err := r.db.QueryRow(ctx, `
 		SELECT id, COALESCE(email, '') FROM users
-		WHERE handle = $1 AND status <> 'banned'`, handle).Scan(&userID, &stored)
+		WHERE email = $1 AND status <> 'banned'`, email).Scan(&userID, &stored)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, "", ErrResetUserUnknown
 	}
 	if err != nil {
 		return 0, "", err
 	}
-	if stored == "" || stored != email {
+	if stored == "" {
 		return 0, "", ErrResetUserUnknown
 	}
 	return userID, stored, nil
@@ -251,22 +252,21 @@ func (h *Handler) captcha(w http.ResponseWriter, r *http.Request) {
 }
 
 type resetRequest struct {
-	Handle        string `json:"handle"`
 	Email         string `json:"email"`
 	CaptchaID     string `json:"captcha_id"`
 	CaptchaAnswer string `json:"captcha_answer"`
 }
 
-// resetRequestCode 处理找回密码第一步：校验账号/邮箱匹配 + IP 频控，
-// 通过后签发验证码并投递邮件。响应不泄露账号是否存在（统一文案）。
+// resetRequestCode 处理找回密码第一步：校验邮箱 + IP 频控，
+// 通过后签发验证码并投递邮件。响应不泄露邮箱是否注册（统一文案）。
 func (h *Handler) resetRequestCode(w http.ResponseWriter, r *http.Request) {
 	var request resetRequest
 	if err := httpserver.DecodeJSON(r, &request); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
-	handle := trimHandle(request.Handle)
-	if !handlePattern.MatchString(handle) {
+	email := NormalizeEmail(request.Email)
+	if !emailPattern.MatchString(email) {
 		h.failReset(w, r, ErrResetUserUnknown)
 		return
 	}
@@ -290,7 +290,7 @@ func (h *Handler) resetRequestCode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	userID, email, lookupErr := h.svc.repo.LookupResetTarget(r.Context(), handle, request.Email)
+	userID, addr, lookupErr := h.svc.repo.LookupResetTarget(r.Context(), email)
 	if lookupErr != nil {
 		// 无论账号是否存在都消耗一次频控计数，避免探测。
 		h.failReset(w, r, lookupErr)
@@ -301,19 +301,18 @@ func (h *Handler) resetRequestCode(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	if err := h.svc.repo.EnqueueResetEmail(r.Context(), email, code); err != nil {
+	if err := h.svc.repo.EnqueueResetEmail(r.Context(), addr, code); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
 	h.log.Info("password reset requested", "user_id", userID, "ip", ip)
 	httpserver.JSON(w, http.StatusOK, map[string]any{
-		// 统一文案：不向调用方泄露账号与邮箱的匹配结果。
-		"message": "如果账号与邮箱匹配，验证码邮件已发出（3 小时内有效）。",
+		// 统一文案：不向调用方泄露邮箱是否注册。
+		"message": "如果这个邮箱已注册，验证码邮件已发出（3 小时内有效）。",
 	})
 }
 
 type resetConfirm struct {
-	Handle      string `json:"handle"`
 	Email       string `json:"email"`
 	Code        string `json:"code"`
 	NewPassword string `json:"new_password"`
@@ -327,8 +326,8 @@ func (h *Handler) resetConfirmHandler(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	handle := trimHandle(request.Handle)
-	if !handlePattern.MatchString(handle) || len(request.Code) != resetCodeLength {
+	email := NormalizeEmail(request.Email)
+	if !emailPattern.MatchString(email) || len(request.Code) != resetCodeLength {
 		h.failReset(w, r, ErrResetCodeInvalid)
 		return
 	}
@@ -341,7 +340,7 @@ func (h *Handler) resetConfirmHandler(w http.ResponseWriter, r *http.Request) {
 			"找回密码暂不可用", httpserver.RequestIDFromContext(r.Context()))
 		return
 	}
-	userID, _, err := h.svc.repo.LookupResetTarget(r.Context(), handle, request.Email)
+	userID, _, err := h.svc.repo.LookupResetTarget(r.Context(), email)
 	if err != nil {
 		h.failReset(w, r, err)
 		return
@@ -385,11 +384,4 @@ func (h *Handler) failReset(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	httpserver.Error(w, http.StatusBadRequest, code, err.Error(),
 		httpserver.RequestIDFromContext(r.Context()))
-}
-
-func trimHandle(value string) string {
-	for len(value) > 0 && (value[0] == '@') {
-		value = value[1:]
-	}
-	return value
 }

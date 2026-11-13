@@ -2,7 +2,8 @@
 // 底部信息层（UI 规范 §6.3）：作者、文案（默认两行）、话题、音乐条胶囊。
 // 文案不放在玻璃面板上，可读性由画面底部渐变遮罩保证。
 const props = defineProps<{
-  handle: string
+  /** 作者显示名：默认昵称「用户 + 夜街号」，后台可改。 */
+  author: string
   caption: string
   tags: string[]
   expanded: boolean
@@ -20,7 +21,7 @@ const emit = defineEmits<{ 'toggle-expand': []; danmaku: [] }>()
       v-if="props.danmaku !== false" type="button" class="danmaku-entry"
       aria-label="发弹幕" @click="emit('danmaku')"
     >弹</button>
-    <div class="author">@{{ props.handle }}</div>
+    <div class="author">{{ props.author }}</div>
     <p class="caption" :class="{ expanded: props.expanded }">{{ props.caption || '暂无文案' }}</p>
     <button v-if="props.caption.length > 42" type="button" class="expand" @click="emit('toggle-expand')">
       {{ props.expanded ? '收起' : '展开' }}

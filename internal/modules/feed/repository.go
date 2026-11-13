@@ -20,7 +20,7 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 // matches contents_public_feed_idx exactly so the partial index is usable.
 func (r *Repository) List(ctx context.Context, cursor int64, limit int) ([]row, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle,
+		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle, u.display_name,
 		       COALESCE(c.published_at, 'epoch'::timestamptz), COALESCE(c.duration_ms, 0)
 		FROM contents c JOIN users u ON u.id = c.author_id
 		WHERE c.publish_state = 'published' AND c.review_status = 'approved'
@@ -39,7 +39,7 @@ func (r *Repository) List(ctx context.Context, cursor int64, limit int) ([]row, 
 		var item row
 		var publishedAt time.Time
 		if err := rows.Scan(&item.ID, &item.Slug, &item.Type, &item.Title, &item.Description,
-			&item.AuthorID, &item.Handle, &publishedAt, &item.DurationMS); err != nil {
+			&item.AuthorID, &item.Handle, &item.DisplayName, &publishedAt, &item.DurationMS); err != nil {
 			return nil, fmt.Errorf("feed: scan: %w", err)
 		}
 		if publishedAt.Year() > 1970 {
@@ -80,7 +80,7 @@ func (r *Repository) Avatars(ctx context.Context, userIDs []int64) (map[int64]st
 // the home feed so a creator page can never expose non-public content.
 func (r *Repository) ListByHandle(ctx context.Context, handle string, cursor int64, limit int) ([]row, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle,
+		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle, u.display_name,
 		       COALESCE(c.published_at, 'epoch'::timestamptz), COALESCE(c.duration_ms, 0)
 		FROM contents c JOIN users u ON u.id = c.author_id
 		WHERE u.handle = $1
@@ -99,7 +99,7 @@ func (r *Repository) ListByHandle(ctx context.Context, handle string, cursor int
 // ListByTopic backs /topic/[slug]; only available topics are publicly browsable.
 func (r *Repository) ListByTopic(ctx context.Context, slug string, cursor int64, limit int) ([]row, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle,
+		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle, u.display_name,
 		       COALESCE(c.published_at, 'epoch'::timestamptz), COALESCE(c.duration_ms, 0)
 		FROM contents c
 		JOIN users u ON u.id = c.author_id
@@ -124,7 +124,7 @@ func scanRows(rows pgx.Rows) ([]row, error) {
 		var item row
 		var publishedAt time.Time
 		if err := rows.Scan(&item.ID, &item.Slug, &item.Type, &item.Title, &item.Description,
-			&item.AuthorID, &item.Handle, &publishedAt, &item.DurationMS); err != nil {
+			&item.AuthorID, &item.Handle, &item.DisplayName, &publishedAt, &item.DurationMS); err != nil {
 			return nil, fmt.Errorf("feed: scan row: %w", err)
 		}
 		if publishedAt.Year() > 1970 {
@@ -298,6 +298,7 @@ type Entry struct {
 	Description string
 	AuthorID    int64
 	Handle      string
+	DisplayName string
 	PublishedAt *time.Time
 	DurationMS  int64
 	// Score 仅规则排序模式使用，作为不透明游标的一部分返回。
@@ -325,7 +326,7 @@ func (r *Repository) ListRanked(ctx context.Context, viewerID int64, cursorScore
 	}
 	rows, err := r.db.Query(ctx, `
 		WITH candidate AS (
-		  SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle,
+		  SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle, u.display_name,
 		         COALESCE(c.published_at, 'epoch'::timestamptz) AS published_at,
 		         COALESCE(c.duration_ms, 0) AS duration_ms,
 		         (
@@ -363,7 +364,7 @@ func (r *Repository) ListRanked(ctx context.Context, viewerID int64, cursorScore
 		  ) AS author_rank
 		  FROM candidate
 		)
-		SELECT id, slug, type, title, description, author_id, handle,
+		SELECT id, slug, type, title, description, author_id, handle, display_name,
 		       published_at, duration_ms, score
 		FROM diversified
 		WHERE author_rank <= 3
@@ -384,7 +385,7 @@ func (r *Repository) ListRanked(ctx context.Context, viewerID int64, cursorScore
 		var item row
 		var publishedAt time.Time
 		if err := rows.Scan(&item.ID, &item.Slug, &item.Type, &item.Title, &item.Description,
-			&item.AuthorID, &item.Handle, &publishedAt, &item.DurationMS,
+			&item.AuthorID, &item.Handle, &item.DisplayName, &publishedAt, &item.DurationMS,
 			&item.Score); err != nil {
 			return nil, fmt.Errorf("feed: scan ranked row: %w", err)
 		}
@@ -487,7 +488,7 @@ func (r *Repository) FollowingHandles(ctx context.Context, userID int64) ([]stri
 // ListFollowing 只返回我关注作者的作品，规则与推荐流一致（§9.3 / §9.4）。
 func (r *Repository) ListFollowing(ctx context.Context, viewerID, cursor int64, limit int) ([]row, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle,
+		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle, u.display_name,
 		       COALESCE(c.published_at, 'epoch'::timestamptz), COALESCE(c.duration_ms, 0)
 		FROM contents c
 		JOIN users u ON u.id = c.author_id
