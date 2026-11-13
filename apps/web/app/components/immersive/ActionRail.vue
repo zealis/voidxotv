@@ -149,6 +149,7 @@ onBeforeUnmount(() => {
   position: absolute;
   right: calc(var(--vp-im-action-rail-offset-right) + env(safe-area-inset-right));
   bottom: calc(var(--vp-im-action-rail-offset-bottom) + env(safe-area-inset-bottom));
+  transition: bottom 200ms ease;
   z-index: var(--vp-im-z-controls);
   display: grid;
   justify-items: center;

@@ -284,7 +284,10 @@ function onSeek(event: MouseEvent) {
 </script>
 
 <template>
-  <article ref="itemRoot" class="item" :data-type="props.item.type">
+  <article
+    ref="itemRoot" class="item" :data-type="props.item.type"
+    :class="{ 'nav-hidden': props.navHidden }"
+  >
     <div class="media-slot" :class="{ 'fit-cover': fitCover }" @click="onSurfaceClick">
       <template v-if="props.item.type === 'image'">
         <GalleryStrip
@@ -539,6 +542,15 @@ function onSeek(event: MouseEvent) {
   scroll-snap-align: start;
   overflow: hidden;
   background: var(--vp-im-bg);
+}
+/* PC 端底栏收起时，左右两侧（信息层 / 操作栏）跟着落到控制条上方：
+   控制条贴底后高约 51px，两侧距底 65px 正好留 14px；有底栏时仍走令牌的 126px。
+   移动端不匹配媒体查询，维持 78 / 74 的原值。 */
+@media (min-width: 781px) {
+  .item.nav-hidden {
+    --vp-im-action-rail-offset-bottom: 65px;
+    --vp-im-info-offset-bottom: 65px;
+  }
 }
 /* 不创建独立层叠上下文：图集指示器需在边缘渐变遮罩之上，而画面本身仍在遮罩之下。 */
 .media-slot { position: absolute; inset: 0; }

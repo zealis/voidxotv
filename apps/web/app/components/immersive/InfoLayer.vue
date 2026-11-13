@@ -38,7 +38,9 @@ const emit = defineEmits<{ 'toggle-expand': []; danmaku: [] }>()
   position: absolute;
   left: 0;
   right: 84px;
-  bottom: calc(126px + env(safe-area-inset-bottom));
+  /* 有底栏 126px、底栏收起 65px（由 ImmersiveItem 按状态下发），过渡与控制条同步。 */
+  bottom: calc(var(--vp-im-info-offset-bottom, 126px) + env(safe-area-inset-bottom));
+  transition: bottom 200ms ease;
   z-index: var(--vp-im-z-controls);
   padding: 0 16px;
   pointer-events: none;

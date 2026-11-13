@@ -39,6 +39,16 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.7.16] - 2026-11-13
+
+### 改进
+
+- 底栏收起时左右两侧组件跟着下移，不再留 61px 空白：信息层与操作栏原先固定在 126px
+  （移动端 78 / 74），底栏一收起就悬在半空。现在 `ImmersiveItem` 在 `.item.nav-hidden` 下把
+  `--vp-im-action-rail-offset-bottom` 与新增的 `--vp-im-info-offset-bottom` 一起改为 65px
+  （控制条贴底高 51 + 14px 间距），两侧加 `transition: bottom 200ms` 与控制条/底栏同步；
+  底栏出现时仍回到 126px。规则写在 `min-width: 781px`，移动端媒体查询不匹配，保持 78 / 74。
+
 ## [0.7.15] - 2026-11-13
 
 ### 改进
