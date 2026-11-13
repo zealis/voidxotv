@@ -110,6 +110,9 @@ func run() error {
 		contentHandler.SetImageStore(store, cfg.S3Bucket)
 		// 头像复用同一个对象存储；未注入时头像接口返回 503（§11.2 账号资料）。
 		settingsHandler.SetImageStore(store)
+		// 新用户注册后异步取一张 DiceBear Micah 随机头像并存入同一个桶；
+		// S3 不可用时保持 nil，注册流程不受影响，前端回落占位头像。
+		authHandler.SetDefaultAvatar(auth.NewDefaultAvatar(authRepository, store, log))
 		// 通知列表的触发者头像复用同一存储；未注入时回退到分组图标，不影响列表。
 		notificationsHandler.SetImageStore(store)
 		// 个人库卡片封面（图集首图 / 视频 poster）复用同一存储；未注入时回退类型占位。

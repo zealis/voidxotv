@@ -45,6 +45,24 @@ node scripts/dev.mjs stop all      # 停止
 - 环境变量样例见 `.env.example`；Go 进程不读 .env 文件，用 shell / compose 注入。
 - 进程日志在 `data/logs/{api,worker,web}.log`，pid 文件在 `data/pids/`。
 
+## 默认头像
+
+新用户注册成功后，API 会异步向 `https://api.dicebear.com/10.x/micah/png` 取一张
+**随机 seed** 的 256px PNG，存入项目自己的对象存储（`avatars/{user_id}/{ts}.png`），
+再把 key 写进 `users.avatar_key`。之后与用户自己上传的头像走完全相同的读取路径
+（`settings.avatarURL` → `store.MediaURL`），页面渲染不再依赖 dicebear.com。
+
+- 实现：`internal/modules/auth/default_avatar.go`，由 `cmd/api/main.go` 在 S3 可用时注入；
+  S3 不可用或 DiceBear 超时/失败时只记 WARN，注册照常成功，前端回落占位头像。
+- 异步且幂等：写库条件是 `avatar_key IS NULL`，不会覆盖用户在异步任务完成前自己上传的头像；
+  写库失败会删掉刚上传的对象，不留孤儿。
+- 只作用于**新注册用户**；存量用户与 seed 数据保持原状。
+
+**署名**：Micah 是 [Micah Lanier《Avatar Illustration System》](https://www.figma.com/community/file/829741575478342595)
+的 remix，按 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 授权。
+风格与 API 见 [DiceBear Micah](https://www.dicebear.com/styles/micah/)。
+设置页的头像区域也展示了同样的署名。
+
 ## 版本与更新日志
 
 - 版本号的事实来源是根目录 [`VERSION`](VERSION)，变更记录见 [`CHANGELOG.md`](CHANGELOG.md)。

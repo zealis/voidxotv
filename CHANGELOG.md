@@ -39,6 +39,30 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.11.0] - 2026-11-13
+
+### 新增
+
+- 新用户注册成功后自动分配一张 **DiceBear Micah 随机头像**：以 `crypto/rand` 生成 seed，
+  向 `https://api.dicebear.com/10.x/micah/png?seed=…&size=256` 取 256px PNG，
+  **下载后存入项目自己的对象存储**（`avatars/{user_id}/{ts}.png`），再把 key 写进
+  `users.avatar_key`。之后与用户自己上传的头像走完全相同的读取路径，页面渲染不依赖
+  dicebear.com 是否在线。
+- `internal/modules/auth/default_avatar.go`：`DefaultAvatar` 组件，最小存储接口
+  `AvatarObjectStore`（PutBytes / Remove），由 `cmd/api/main.go` 在 S3 可用时注入；
+  HTTP 客户端 8s 超时、响应校验状态码 / Content-Type / 256KiB 上限。
+- `auth.Repository.SetDefaultAvatarKey`：带 `avatar_key IS NULL` 条件，异步任务不会覆盖
+  用户在它完成前自己上传的头像；写库失败或未写入时删掉刚存的对象，不留孤儿。
+
+### 改进
+
+- 注册链路不被外部服务拖累：头像分配在注册响应之后用独立 `context.WithTimeout` 异步执行，
+  任何失败只记 WARN，注册照常 201；S3 不可用时组件不注入，前端回落占位头像。
+- 只对**新注册用户**生效，存量用户与 seed 数据保持原状。
+- 合规：Micah 是 Micah Lanier《Avatar Illustration System》的 CC BY 4.0 remix，
+  设置页头像区加了带原作、许可证与 DiceBear 链接的署名，README 新增「默认头像」章节
+  说明实现、失败策略与署名。
+
 ## [0.10.0] - 2026-11-13
 
 ### 新增

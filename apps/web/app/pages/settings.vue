@@ -339,6 +339,12 @@ onBeforeUnmount(() => {
           <div class="label">
             <strong>头像</strong>
             <small>PNG / JPEG / WebP，不超过 2 MiB</small>
+            <small>
+              未上传时自动使用
+              <a href="https://www.dicebear.com/styles/micah/" target="_blank" rel="noopener noreferrer">DiceBear Micah</a>
+              生成的随机头像（原作 Micah Lanier，
+              <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>）
+            </small>
           </div>
           <div class="control avatar-control">
             <span class="avatar-thumb">
@@ -663,6 +669,7 @@ onBeforeUnmount(() => {
 .label { flex: 1; min-width: 0; display: grid; gap: 3px; }
 .label strong { font-size: 14px; font-weight: 500; }
 .label small { font-size: 11px; line-height: 1.5; color: var(--vp-tool-text-2); }
+.label small a { color: var(--vp-tool-accent-ink); text-decoration: underline; }
 .value {
   font-size: 13px; color: var(--vp-tool-text-2);
   min-width: 0; text-align: right; word-break: break-all;

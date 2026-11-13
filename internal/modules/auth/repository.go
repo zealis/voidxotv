@@ -92,6 +92,19 @@ func (r *Repository) RevokeAllSessions(ctx context.Context, userID int64) error 
 	return err
 }
 
+// SetDefaultAvatarKey 给新用户写默认头像 key。带 avatar_key IS NULL 条件：
+// 注册后的异步任务可能晚于用户自己上传头像完成，不能把用户的选择覆盖掉。
+// 返回是否真的写入，false 时调用方需要删掉已上传但无人引用的对象。
+func (r *Repository) SetDefaultAvatarKey(ctx context.Context, userID int64, key string) (bool, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE users SET avatar_key = $2, updated_at = now()
+		WHERE id = $1 AND avatar_key IS NULL`, userID, key)
+	if err != nil {
+		return false, fmt.Errorf("auth: set default avatar: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func nullable(value string) any {
 	if strings.TrimSpace(value) == "" {
 		return nil

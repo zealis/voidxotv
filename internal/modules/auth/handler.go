@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"log/slog"
@@ -25,10 +26,15 @@ type Handler struct {
 	log *slog.Logger
 	// verification 管找回密码的验证码 / 频控 / 图形验证码；用 setter 注入。
 	verification *VerificationStore
+	// defaultAvatar 给新用户异步分配一张随机头像；S3 不可用时为 nil，注册照常可用。
+	defaultAvatar *DefaultAvatar
 }
 
 // SetVerificationStore 注入验证码存储；未注入时找回密码接口返回 503。
 func (h *Handler) SetVerificationStore(store *VerificationStore) { h.verification = store }
+
+// SetDefaultAvatar 注入默认头像分配器（需要对象存储，由组装层注入）。
+func (h *Handler) SetDefaultAvatar(avatar *DefaultAvatar) { h.defaultAvatar = avatar }
 
 func NewHandler(svc *Service, cfg config.Config, log *slog.Logger) *Handler {
 	return &Handler{svc: svc, cfg: cfg, log: log}
@@ -72,6 +78,15 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.writeError(w, r, err)
 		return
+	}
+	// 异步分配默认头像：不阻塞注册响应，也不把外部图片服务的可用性绑到注册链路上。
+	// 用独立的 context + 超时，避免请求结束后 r.Context() 被取消导致任务半途而废。
+	if h.defaultAvatar != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), defaultAvatarTTL+2*time.Second)
+			defer cancel()
+			h.defaultAvatar.Assign(ctx, user.ID, user.Handle)
+		}()
 	}
 	httpserver.JSON(w, http.StatusCreated, map[string]any{
 		"id": user.ID, "handle": user.Handle, "role": user.Role,
