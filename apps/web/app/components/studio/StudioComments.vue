@@ -9,6 +9,7 @@ interface ManagedComment {
   content_slug: string
   content_type: 'video' | 'image'
   handle: string
+  display_name: string
   body: string
   created_at: string
 }
@@ -98,7 +99,7 @@ onBeforeUnmount(() => { if (savedTimer) clearTimeout(savedTimer) })
       <ul class="list">
         <li v-for="comment in items" :key="comment.id">
           <div class="line">
-            <span class="who">{{ comment.handle }}</span>
+            <span class="who">{{ comment.display_name || comment.handle }}</span>
             <span class="time">{{ timeText(comment.created_at) }}</span>
           </div>
           <p class="body">{{ comment.body }}</p>

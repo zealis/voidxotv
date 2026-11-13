@@ -229,26 +229,49 @@ func (h *Handler) getReactions(w http.ResponseWriter, r *http.Request) {
 	httpserver.JSON(w, http.StatusOK, result)
 }
 
+// avatarURL 把头像对象键换成可访问地址。未注入对象存储（本地只起 API 不起 S3）
+// 或签名失败时返回空串，前端据此回退到默认用户图标，评论本身不受影响。
+func (h *Handler) avatarURL(ctx context.Context, key string) string {
+	if h.store == nil || key == "" {
+		return ""
+	}
+	url, err := h.store.MediaURL(ctx, key)
+	if err != nil {
+		h.log.Warn("interactions: avatar url", "error", err, "key", key)
+		return ""
+	}
+	return url
+}
+
 // ── 评论（§6.5 评论抽屉：分页列表、楼中楼回复、@提及通知）──────────
 
 type Comment struct {
-	ID        int64     `json:"id"`
-	Body      string    `json:"body"`
-	Handle    string    `json:"handle"`
+	ID     int64  `json:"id"`
+	Body   string `json:"body"`
+	Handle string `json:"handle"`
+	// DisplayName 是展示用昵称（默认「用户 + 夜街号」）；Handle 只用于 @ 提及与定位用户。
+	DisplayName string `json:"display_name"`
+	// AvatarURL 是可直接访问的头像地址；未设置头像时为空，前端回退到默认图标。
+	AvatarURL string    `json:"avatar_url"`
 	CreatedAt time.Time `json:"created_at"`
 	UserID    int64     `json:"user_id"`
 	// ReplyCount 是该顶层评论线程内的可见回复数（仅顶层评论返回）。
 	ReplyCount int64 `json:"reply_count"`
+	// avatarKey 只在服务端流转：对外一律给可访问地址，不泄漏对象键。
+	avatarKey string
 }
 
 type Reply struct {
-	ID        int64     `json:"id"`
-	Body      string    `json:"body"`
-	Handle    string    `json:"handle"`
-	CreatedAt time.Time `json:"created_at"`
-	UserID    int64     `json:"user_id"`
-	// ReplyTo 是「回复 @某人」的目标作者 handle（回复线程内其他回复时才有）。
-	ReplyTo string `json:"reply_to,omitempty"`
+	ID          int64     `json:"id"`
+	Body        string    `json:"body"`
+	Handle      string    `json:"handle"`
+	DisplayName string    `json:"display_name"`
+	AvatarURL   string    `json:"avatar_url"`
+	CreatedAt   time.Time `json:"created_at"`
+	UserID      int64     `json:"user_id"`
+	// ReplyTo 是「回复 @某人」的目标作者昵称（回复线程内其他回复时才有）。
+	ReplyTo   string `json:"reply_to,omitempty"`
+	avatarKey string
 }
 
 // listComments 返回顶层评论（倒序游标分页），每条带线程内可见回复数。
@@ -268,7 +291,10 @@ func (h *Handler) listComments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.Query(r.Context(), `
-		SELECT c.id, c.body, u.handle, c.created_at, c.user_id,
+		SELECT c.id, c.body, u.handle,
+		       COALESCE(NULLIF(btrim(u.display_name), ''), u.handle),
+		       COALESCE(u.avatar_key, ''),
+		       c.created_at, c.user_id,
 		       (SELECT count(*) FROM comments rep
 		        WHERE rep.parent_id = c.id AND rep.status = 'visible')
 		FROM comments c JOIN users u ON u.id = c.user_id
@@ -284,8 +310,8 @@ func (h *Handler) listComments(w http.ResponseWriter, r *http.Request) {
 	items := []Comment{}
 	for rows.Next() {
 		var item Comment
-		if err := rows.Scan(&item.ID, &item.Body, &item.Handle, &item.CreatedAt,
-			&item.UserID, &item.ReplyCount); err != nil {
+		if err := rows.Scan(&item.ID, &item.Body, &item.Handle, &item.DisplayName,
+			&item.avatarKey, &item.CreatedAt, &item.UserID, &item.ReplyCount); err != nil {
 			h.fail(w, r, err)
 			return
 		}
@@ -294,6 +320,9 @@ func (h *Handler) listComments(w http.ResponseWriter, r *http.Request) {
 	if err := rows.Err(); err != nil {
 		h.fail(w, r, err)
 		return
+	}
+	for i := range items {
+		items[i].AvatarURL = h.avatarURL(r.Context(), items[i].avatarKey)
 	}
 	hasMore := len(items) > limit
 	if hasMore {
@@ -338,7 +367,11 @@ func (h *Handler) listReplies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.Query(r.Context(), `
-		SELECT c.id, c.body, u.handle, c.created_at, c.user_id, COALESCE(rt.handle, '')
+		SELECT c.id, c.body, u.handle,
+		       COALESCE(NULLIF(btrim(u.display_name), ''), u.handle),
+		       COALESCE(u.avatar_key, ''),
+		       c.created_at, c.user_id,
+		       COALESCE(NULLIF(btrim(rt.display_name), ''), rt.handle, '')
 		FROM comments c
 		JOIN users u ON u.id = c.user_id
 		LEFT JOIN users rt ON rt.id = c.reply_to_user_id
@@ -354,8 +387,8 @@ func (h *Handler) listReplies(w http.ResponseWriter, r *http.Request) {
 	items := []Reply{}
 	for rows.Next() {
 		var item Reply
-		if err := rows.Scan(&item.ID, &item.Body, &item.Handle, &item.CreatedAt,
-			&item.UserID, &item.ReplyTo); err != nil {
+		if err := rows.Scan(&item.ID, &item.Body, &item.Handle, &item.DisplayName,
+			&item.avatarKey, &item.CreatedAt, &item.UserID, &item.ReplyTo); err != nil {
 			h.fail(w, r, err)
 			return
 		}
@@ -364,6 +397,9 @@ func (h *Handler) listReplies(w http.ResponseWriter, r *http.Request) {
 	if err := rows.Err(); err != nil {
 		h.fail(w, r, err)
 		return
+	}
+	for i := range items {
+		items[i].AvatarURL = h.avatarURL(r.Context(), items[i].avatarKey)
 	}
 	hasMore := len(items) > limit
 	if hasMore {
@@ -464,8 +500,18 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 	}
 	h.notifyMentions(r.Context(), id, principal, body)
 
+	// 作者信息此时还没进列表，单独回填一次：客户端用返回值替换乐观插入的占位条目。
+	var displayName, avatarKey string
+	if err := h.db.QueryRow(r.Context(), `
+		SELECT COALESCE(NULLIF(btrim(display_name), ''), handle), COALESCE(avatar_key, '')
+		FROM users WHERE id = $1`, principal.UserID).Scan(&displayName, &avatarKey); err != nil {
+		h.log.Warn("interactions: comment author", "error", err, "user_id", principal.UserID)
+		displayName = principal.Handle
+	}
+
 	httpserver.JSON(w, http.StatusCreated, Comment{
 		ID: commentID, Body: body, Handle: principal.Handle,
+		DisplayName: displayName, AvatarURL: h.avatarURL(r.Context(), avatarKey),
 		CreatedAt: createdAt, UserID: principal.UserID,
 	})
 }

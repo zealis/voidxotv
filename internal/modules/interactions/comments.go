@@ -22,6 +22,7 @@ type ManagedComment struct {
 	ContentSlug  string    `json:"content_slug"`
 	ContentType  string    `json:"content_type"`
 	Handle       string    `json:"handle"`
+	DisplayName  string    `json:"display_name"`
 	Body         string    `json:"body"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -47,7 +48,9 @@ func (h *Handler) myComments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.Query(r.Context(), `
-		SELECT cm.id, cm.content_id, c.title, c.slug, c.type, u.handle, cm.body, cm.created_at
+		SELECT cm.id, cm.content_id, c.title, c.slug, c.type, u.handle,
+		       COALESCE(NULLIF(btrim(u.display_name), ''), u.handle),
+		       cm.body, cm.created_at
 		FROM comments cm
 		JOIN contents c ON c.id = cm.content_id
 		JOIN users u ON u.id = cm.user_id
@@ -64,7 +67,7 @@ func (h *Handler) myComments(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item ManagedComment
 		if err := rows.Scan(&item.ID, &item.ContentID, &item.ContentTitle, &item.ContentSlug,
-			&item.ContentType, &item.Handle, &item.Body, &item.CreatedAt); err != nil {
+			&item.ContentType, &item.Handle, &item.DisplayName, &item.Body, &item.CreatedAt); err != nil {
 			h.fail(w, r, err)
 			return
 		}

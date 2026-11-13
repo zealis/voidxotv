@@ -9,6 +9,8 @@ interface CommentItem {
   id: number
   body: string
   handle: string
+  display_name?: string
+  avatar_url?: string
   created_at: string
   user_id: number
   reply_count: number
@@ -19,6 +21,8 @@ interface ReplyItem {
   id: number
   body: string
   handle: string
+  display_name?: string
+  avatar_url?: string
   created_at: string
   user_id: number
   reply_to?: string
@@ -47,7 +51,7 @@ const draft = ref('')
 const sentDraft = ref('')
 const postFailed = ref(false)
 const notice = ref('')
-const replyTo = ref<{ id: number; handle: string } | null>(null)
+const replyTo = ref<{ id: number; name: string } | null>(null)
 const confirmDelete = ref<number | null>(null)
 const me = ref<{ id: number; handle: string } | null>(null)
 const threads = reactive<Record<number, Thread>>({})
@@ -128,8 +132,23 @@ async function loadReplies(rootId: number) {
   }
 }
 
-function startReply(handle: string, commentId: number) {
-  replyTo.value = { id: commentId, handle }
+// 没设置头像的用户回退到默认图标；再按 user_id 取一个固定色相，
+// 让不同评论者的占位头像至少能区分开，而不是一排同样的灰圆。
+function avatarTint(userId: number) {
+  if (!userId) return undefined
+  const hue = (userId * 47) % 360
+  return { background: `hsl(${hue} 30% 26%)`, color: `hsl(${hue} 55% 78%)` }
+}
+
+// 展示用昵称：服务端已按「昵称优先、缺失回落夜街号」算好；
+// 乐观插入的本地条目直接给「我」，等接口返回再换成真实昵称。
+function authorName(item: { handle: string; display_name?: string }): string {
+  return item.display_name?.trim() || item.handle
+}
+
+// 回复标识用昵称而不是 handle：handle 现在是 6 位夜街号，展示出来像一串 ID。
+function startReply(target: { id: number; handle: string; display_name?: string }) {
+  replyTo.value = { id: target.id, name: authorName(target) }
   input.value?.focus()
 }
 
@@ -144,17 +163,18 @@ async function submit() {
   const now = Date.now()
 
   // 乐观更新：本地先插入 pending 条目；失败时移除并恢复草稿（§12 不静默丢失）。
+  // 作者信息只写「我」，接口返回后整条替换成服务端的昵称与头像。
   if (parent) {
     const thread = ensureThread(parent.id)
     thread.open = true
     thread.items.push({
-      id: -now, body: text, handle: me.value?.handle || '我',
+      id: -now, body: text, handle: '', display_name: '我',
       created_at: new Date().toISOString(), user_id: me.value?.id ?? 0, pending: true,
     })
     if (!thread.loaded) await loadReplies(parent.id).catch(() => {})
   } else {
     items.value = [{
-      id: -now, body: text, handle: me.value?.handle || '我',
+      id: -now, body: text, handle: '', display_name: '我',
       created_at: new Date().toISOString(), user_id: me.value?.id ?? 0,
       reply_count: 0, pending: true,
     }, ...items.value]
@@ -171,7 +191,7 @@ async function submit() {
     if (parent) {
       const thread = ensureThread(parent.id)
       const index = thread.items.findIndex((it) => it.id === -now)
-      if (index >= 0) thread.items.splice(index, 1, { ...created, reply_to: parent.handle })
+      if (index >= 0) thread.items.splice(index, 1, { ...created, reply_to: parent.name })
       bumpReplyCount(parent.id, 1)
     } else {
       const index = items.value.findIndex((it) => it.id === -now)
@@ -322,9 +342,12 @@ function isMine(item: { user_id: number; id: number }): boolean {
         <p v-if="notice" class="notice" role="status">{{ notice }}</p>
         <p v-if="!items.length && !loading" class="empty">还没有评论，来抢第一条。</p>
         <article v-for="comment in items" :key="comment.id" class="comment">
-          <div class="avatar">{{ comment.handle.slice(0, 1) }}</div>
+          <div class="avatar" :style="comment.avatar_url ? undefined : avatarTint(comment.user_id)">
+            <img v-if="comment.avatar_url" :src="comment.avatar_url" alt="" loading="lazy">
+            <ImIcon v-else name="user" :size="18" />
+          </div>
           <div class="body">
-            <span class="name">{{ comment.handle }}</span>
+            <span class="name">{{ authorName(comment) }}</span>
             <p :class="{ pending: comment.pending }">
               <template v-for="(tk, i) in tokens(comment.body)" :key="i">
                 <span v-if="tk.mention" class="mention">{{ tk.text }}</span>
@@ -337,7 +360,7 @@ function isMine(item: { user_id: number; id: number }): boolean {
             </p>
             <div class="meta">
               <small>{{ when(comment.created_at) }}</small>
-              <button type="button" class="action" @click="startReply(comment.handle, comment.id)">回复</button>
+              <button type="button" class="action" @click="startReply(comment)">回复</button>
               <button
                 v-if="isMine(comment)" type="button" class="action danger"
                 @click="requestRemove(comment)"
@@ -349,9 +372,12 @@ function isMine(item: { user_id: number; id: number }): boolean {
               </button>
               <template v-if="threads[comment.id]?.open">
                 <article v-for="reply in threads[comment.id]!.items" :key="reply.id" class="comment reply">
-                  <div class="avatar small">{{ reply.handle.slice(0, 1) }}</div>
+                  <div class="avatar small" :style="reply.avatar_url ? undefined : avatarTint(reply.user_id)">
+                    <img v-if="reply.avatar_url" :src="reply.avatar_url" alt="" loading="lazy">
+                    <ImIcon v-else name="user" :size="14" />
+                  </div>
                   <div class="body">
-                    <span class="name">{{ reply.handle }}</span>
+                    <span class="name">{{ authorName(reply) }}</span>
                     <p :class="{ pending: reply.pending }">
                       <span v-if="reply.reply_to" class="reply-tag">回复 @{{ reply.reply_to }}</span>
                       <template v-for="(tk, i) in tokens(reply.body)" :key="i">
@@ -365,7 +391,7 @@ function isMine(item: { user_id: number; id: number }): boolean {
                     </p>
                     <div class="meta">
                       <small>{{ when(reply.created_at) }}</small>
-                      <button type="button" class="action" @click="startReply(reply.handle, reply.id)">回复</button>
+                      <button type="button" class="action" @click="startReply(reply)">回复</button>
                       <button
                         v-if="isMine(reply)" type="button" class="action danger"
                         @click="requestRemove(reply)"
@@ -389,13 +415,13 @@ function isMine(item: { user_id: number; id: number }): boolean {
       </div>
       <form class="composer" :class="{ failed: postFailed }" @submit.prevent="submit">
         <span v-if="replyTo" class="reply-chip">
-          回复 @{{ replyTo.handle }}
+          回复 @{{ replyTo.name }}
           <button type="button" aria-label="取消回复" @click="cancelReply"><ImIcon name="close" :size="12" /></button>
         </span>
         <div class="row">
           <input
             ref="input" v-model="draft" type="text" maxlength="200"
-            :placeholder="replyTo ? `回复 @${replyTo.handle}…` : '说点什么…'"
+            :placeholder="replyTo ? `回复 @${replyTo.name}…` : '说点什么…'"
             aria-label="评论内容"
           />
           <!-- @ 提及与表情：入口先就位，功能下一轮再做，因此保持禁用并标注「即将上线」，
@@ -487,9 +513,12 @@ function isMine(item: { user_id: number; id: number }): boolean {
   place-items: center;
   border-radius: 50%;
   background: var(--vp-im-surface-raised);
-  font-size: 13px;
+  /* 没有头像的用户回退到默认用户图标，图标色比正文弱一档。 */
+  color: var(--vp-im-text-secondary);
+  overflow: hidden;
 }
-.avatar.small { width: 26px; height: 26px; font-size: 11px; }
+.avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.avatar.small { width: 26px; height: 26px; }
 .body { flex: 1; min-width: 0; }
 .name { font-size: 12px; color: var(--vp-im-text-secondary); }
 .body p { margin: 3px 0; font-size: 14px; line-height: 1.5; word-break: break-word; }

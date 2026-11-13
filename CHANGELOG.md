@@ -39,6 +39,28 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.15.1] - 2026-11-13
+
+### 修复
+
+- 评论抽屉里作者名显示成一串 6 位数字（如 `000034`），头像是个圆角方块里的「0」。
+  根因：`GET /api/v1/contents/{id}/comments` 与 `.../comments/{commentID}/replies` 只查 `users.handle`，
+  前端把 handle 同时当昵称和头像首字；夜街号改成 6 位数字后（0.13.0）handle 已经完全不像昵称了。
+  改法：两个接口补 `display_name`（取 `COALESCE(NULLIF(btrim(display_name), ''), handle)`）和
+  `avatar_url`（`users.avatar_key` 经 `store.MediaURL` 换成可访问地址，对象键只走 `json:"-"` 的私有字段不外泄）。
+- `POST /api/v1/contents/{id}/comments` 的返回值同样带上作者昵称与头像：乐观插入的「我」占位条目被服务端结果替换后，
+  不会再闪回夜街号；S3 未注入或签名失败时头像留空，评论本身照常返回。
+- 「回复 @某人」标识显示夜街号：`listReplies` 的 `reply_to` 改为被回复人的昵称（`COALESCE(rt.display_name, rt.handle)`），
+  前端 `startReply()` 改成接收整条评论对象，输入框上方 chip 与占位文案一并改用昵称。
+- 创作者中心「评论管理」的作者列只显示 handle，改为昵称：`GET /api/v1/me/comments` 补 `display_name`。
+- 评论头像渲染：`CommentSheet.vue` 有头像时用 `<img>` 铺满 34px / 26px 圆形（`object-fit: cover`），
+  没有头像时不显示空白方块，回退到默认用户图标，并按 `user_id` 生成固定色相底色，让不同评论者能区分开。
+
+### 改进
+
+- 新增回归脚本 `.tools/headless-test/m48-comments.js`：校验昵称不是 6 位夜街号、真实头像可加载、
+  头像仍为圆形、回复标识用昵称；另用请求拦截抹掉 `avatar_url` 验证无头像回退（不改数据库）。当前 9 项全过。
+
 ## [0.15.0] - 2026-11-13
 
 ### 新增
