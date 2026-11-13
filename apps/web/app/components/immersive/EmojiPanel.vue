@@ -93,7 +93,15 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
         type="button" class="kind gif" disabled
         title="GIF 即将上线" aria-label="GIF（即将上线）"
       >
-        GIF
+        <!-- GIF 徽标是 36 格、evenodd 填充的复合字形，和 ImIcon 的 24 格单路径线性体系不同源，
+             所以直接内联；fill 用 currentColor 跟随按钮色（原稿是 #2F3035/.7，深色主题下不可见）。 -->
+        <svg width="32" height="32" viewBox="0 0 36 36" fill="none" aria-hidden="true" focusable="false">
+          <path
+            fill-rule="evenodd" clip-rule="evenodd"
+            d="M27.167 18a9.167 9.167 0 1 1-18.334 0 9.167 9.167 0 0 1 18.334 0zM29 18c0 6.075-4.925 11-11 11S7 24.075 7 18 11.925 7 18 7s11 4.925 11 11zm-12.083 2.996a4.977 4.977 0 0 1-1.325.513c-.46.105-.93.158-1.409.158-.51 0-.979-.086-1.408-.257-.43-.17-.801-.414-1.114-.729a3.46 3.46 0 0 1-.737-1.163A4.256 4.256 0 0 1 10.667 18c0-.559.086-1.064.257-1.518.178-.453.424-.838.737-1.153a3.163 3.163 0 0 1 1.114-.74c.43-.17.899-.256 1.408-.256.522 0 1 .07 1.436.207a2.73 2.73 0 0 1 1.16.69l-1.012 1.183a2.02 2.02 0 0 0-.663-.493c-.246-.111-.552-.167-.92-.167-.308 0-.587.056-.838.167-.246.112-.458.27-.636.473a2.092 2.092 0 0 0-.414.71 2.817 2.817 0 0 0-.138.897c0 .328.046.63.138.907.098.27.236.506.414.71.178.197.39.351.635.463.252.111.531.167.838.167.313 0 .583-.036.81-.108.227-.079.409-.158.543-.237V18.77h-1.169v-1.42h2.55v3.647zm1.246-6.485h1.436v6.978h-1.436v-6.978zm7.17 0h-4.372v6.978h1.436v-2.72h2.715v-1.42h-2.715V15.93h2.936v-1.42z"
+            fill="currentColor"
+          />
+        </svg>
       </button>
     </div>
   </div>
@@ -193,8 +201,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
 .kind {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -206,15 +214,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
   color: var(--vp-im-accent);
   cursor: default;
 }
-/* GIF 徽标：描边圆 + 三个字母，外框尺寸与左边的圆脸图标一致。 */
-.kind.gif {
-  border: 2px solid currentColor;
-  border-radius: 50%;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
-}
+/* GIF 徽标自己画了圆环和字母，这里只需要给它一个弱一档的颜色。
+   svg 用 32px：外圈环半径 11/36，渲染后直径约 19.5px，与左边 26px 的圆脸图标一致。 */
 .kind.gif:disabled {
   cursor: not-allowed;
   opacity: 0.6;
