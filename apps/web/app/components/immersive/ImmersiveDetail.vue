@@ -30,6 +30,18 @@ const { data, error } = await useAsyncData(`feed-detail-${props.slug}`, () =>
   $fetch<{ data: FeedItem }>(`/api/v1/feed/${encodeURIComponent(props.slug)}`))
 
 const item = computed<FeedItem | null>(() => data.value?.data || null)
+
+// 底栏收起状态：视频跟随播放；图片默认收起，点画面唤出。移动端由 CSS 断点忽略。
+const imageNavPinned = ref(false)
+const chromeCollapsed = computed(() => {
+  if (!item.value) return false
+  if (item.value.type === 'image') return !imageNavPinned.value
+  return player.state.playing
+})
+function toggleImageChrome() {
+  if (item.value?.type === 'image') imageNavPinned.value = !imageNavPinned.value
+}
+watch(() => item.value?.id, () => { imageNavPinned.value = false })
 const deepLink = computed(() => item.value
   ? (item.value.type === 'image' ? `/image/${item.value.slug}` : `/video/${item.value.slug}`)
   : '')
@@ -224,7 +236,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="detail-root" data-surface="immersive">
-    <ChromeBars :show-nav="true" :playing="player.state.playing" />
+    <ChromeBars :show-nav="true" :collapsed="chromeCollapsed" />
 
     <div v-if="error || !item" class="state">
       <h1>这条作品暂时看不到</h1>
@@ -247,8 +259,9 @@ onBeforeUnmount(() => {
             :following="state(item.slug).following"
             :counts="item.stats" :label="formatCount" :player="player.state"
             :caption="caption(item.description)" :tags="tags(item.description)"
-            :expanded="expanded"
+            :expanded="expanded" :nav-hidden="chromeCollapsed"
             @toggle="player.toggle()" @like="onLike(item)"
+            @toggle-chrome="toggleImageChrome"
             @comment="sheetOpen = true" @favorite="onFavorite(item)"
             @share="notify('深链接：' + deepLink)" @follow="toggleFollow(item.slug)" @report="reportOpen = true"
             @expand="expanded = !expanded" @unmute="player.setMuted(false)"

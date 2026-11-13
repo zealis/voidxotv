@@ -3,12 +3,13 @@
 const props = withDefaults(defineProps<{
   channel?: 'follow' | 'recommend'
   showNav?: boolean
-  // PC 端播放时底栏自动收起，暂停时恢复；移动端始终显示（由 CSS 断点控制）。
-  playing?: boolean
+  // 底栏是否收起：视频播放中、或图片浏览态（点画面可唤出）。
+  // 只在 PC 端（≥781px）生效，移动端始终常驻。
+  collapsed?: boolean
 }>(), {
   channel: 'recommend',
   showNav: true,
-  playing: false,
+  collapsed: false,
 })
 const emit = defineEmits<{
   'update:channel': [value: 'follow' | 'recommend']
@@ -40,7 +41,7 @@ const emit = defineEmits<{
 
   <nav
     v-if="props.showNav" class="bottom-nav vp-glass"
-    :class="{ 'bottom-nav--auto-hide': props.playing }"
+    :class="{ 'bottom-nav--auto-hide': props.collapsed }"
     aria-label="主导航"
   >
     <NuxtLink to="/" class="nav-item active" aria-label="首页">

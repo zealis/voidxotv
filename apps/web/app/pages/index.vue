@@ -54,6 +54,20 @@ function notify(message: string) {
 
 const currentItem = computed<FeedItem | null>(() => items.value[current.value] || null)
 
+// 底栏收起状态：视频跟随播放（播放收起、暂停恢复）；图片没有播放语义，
+// 默认收起保持沉浸，点画面可唤出（唤出后再点收起）。移动端由 CSS 断点忽略该状态。
+const imageNavPinned = ref(false)
+const chromeCollapsed = computed(() => {
+  if (!currentItem.value) return false
+  if (currentItem.value.type === 'image') return !imageNavPinned.value
+  return player.state.playing
+})
+function toggleImageChrome() {
+  if (currentItem.value?.type === 'image') imageNavPinned.value = !imageNavPinned.value
+}
+// 切到另一条内容时，图片回到默认收起，不复用上一条的唤出状态。
+watch(current, () => { imageNavPinned.value = false })
+
 // 点赞 / 收藏落库（§6.2）：接口成功才更新乐观状态与角标；未登录是预期场景，给引导不报错。
 async function onLike(item: FeedItem) {
   try {
@@ -273,7 +287,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="feed-root" data-surface="immersive">
-    <ChromeBars v-model:channel="channel" :playing="player.state.playing" />
+    <ChromeBars v-model:channel="channel" :collapsed="chromeCollapsed" />
 
     <div ref="scroller" class="scroller" :inert="sheetOpen || undefined">
       <div
@@ -288,8 +302,9 @@ onBeforeUnmount(() => {
           :counts="item.stats" :label="formatCount" :player="player.state"
           :caption="caption(item.description)" :tags="tags(item.description)"
           :expanded="expanded"
-          :autoplay="barAutoplay" :clear-ui="barClear"
+          :autoplay="barAutoplay" :clear-ui="barClear" :nav-hidden="chromeCollapsed"
           @toggle="player.toggle()" @like="onLike(item)"
+          @toggle-chrome="toggleImageChrome"
           @comment="sheetOpen = true" @favorite="onFavorite(item)"
           @share="onShare(item)" @follow="onFollow(item)" @report="reportOpen = true"
           @expand="expanded = !expanded" @unmute="player.setMuted(false)"

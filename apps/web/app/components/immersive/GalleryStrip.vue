@@ -61,11 +61,11 @@ watch(() => props.index, (value) => {
     </div>
     <button
       v-if="active > 0" type="button" class="arrow left" aria-label="上一张"
-      @click="go(active - 1)"
+      @click.stop="go(active - 1)"
     ><ImIcon name="back" :size="20" /></button>
     <button
       v-if="active < props.images.length - 1" type="button" class="arrow right" aria-label="下一张"
-      @click="go(active + 1)"
+      @click.stop="go(active + 1)"
     ><ImIcon name="back" :size="20" /></button>
   </div>
 </template>

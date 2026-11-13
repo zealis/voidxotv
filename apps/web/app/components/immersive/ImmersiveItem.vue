@@ -39,6 +39,8 @@ const props = defineProps<{
   autoplay?: boolean
   /** 清屏开关（沉浸流传入；详情页不传则隐藏清屏按钮）。 */
   clearUi?: boolean
+  /** 底栏是否收起：收起时控制条贴到屏幕底部，避免下方留一条空区。 */
+  navHidden?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -58,6 +60,8 @@ const emit = defineEmits<{
   volume: [value: number]
   autoplayToggle: []
   clearToggle: []
+  /** 图片浏览态点画面：唤出/收起底栏与控制条。 */
+  toggleChrome: []
   qualityAuto: []
   pip: []
   danmakuToggle: []
@@ -251,7 +255,11 @@ function showFlash(value: 'play' | 'pause' | 'like') {
 }
 
 function onSurfaceClick() {
-  if (props.item.type === 'image') return
+  // 图片没有播放/暂停：点画面切换底栏与控制条的显隐（默认收起，保持沉浸）。
+  if (props.item.type === 'image') {
+    emit('toggleChrome')
+    return
+  }
   // 中央图标表示「下一步可执行的动作」：暂停后显示播放键（提示可继续播放），
   // 恢复播放后显示暂停键。之前写反了，播放时点按会闪暂停图标。
   showFlash(props.player.playing ? 'play' : 'pause')
@@ -323,7 +331,7 @@ function onSeek(event: MouseEvent) {
     <div
       v-if="props.active && props.item.type === 'video' && props.player.ready"
       ref="bar" class="player-bar"
-      :class="{ 'player-bar--flush': props.player.playing }"
+      :class="{ 'player-bar--flush': props.navHidden }"
       @click.stop
     >
       <!-- 进度：贴在控制条上沿的细线，点击或方向键都能定位。 -->
@@ -472,7 +480,9 @@ function onSeek(event: MouseEvent) {
     <!-- 图片控制条（§5.4）：图片没有音轨，只留轮播 / 连播 / 清屏 / 全屏，别让底栏上方空一条。 -->
     <div
       v-if="props.active && props.item.type === 'image'"
-      class="player-bar player-bar--image" @click.stop
+      class="player-bar player-bar--image"
+      :class="{ 'player-bar--flush': props.navHidden }"
+      @click.stop
     >
       <div class="pb-row">
         <button
