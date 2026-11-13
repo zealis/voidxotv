@@ -30,10 +30,6 @@ const emit = defineEmits<{ 'toggle-expand': []; danmaku: [] }>()
     <div v-if="props.tags.length" class="tags">
       <span v-for="tag in props.tags" :key="tag">{{ tag }}</span>
     </div>
-    <div class="music vp-glass vp-glass-compact" :aria-label="`背景音乐：${props.handle} 的原声`">
-      <ImIcon name="music" :size="16" />
-      <span class="music-name">{{ props.handle }} · 原声</span>
-    </div>
   </section>
 </template>
 
@@ -104,20 +100,5 @@ const emit = defineEmits<{ 'toggle-expand': []; danmaku: [] }>()
   font-size: 12px;
   color: var(--vp-im-text-primary);
   text-shadow: 0 1px 3px rgba(10, 10, 31, 0.5);
-}
-.music {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 230px;
-  margin-top: 10px;
-  padding: 7px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-}
-.music-name {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 </style>
