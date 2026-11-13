@@ -8,7 +8,7 @@ package buildinfo
 // Version 是本次构建的版本号，与 VERSION 文件保持一致。
 // 发布流水线可用
 // -ldflags "-X github.com/yejie/voidxotv/internal/platform/buildinfo.Version=x.y.z" 覆盖。
-var Version = "0.12.1"
+var Version = "0.13.0"
 
 // Commit 是构建对应的提交；本地开发保持 dev，发布构建由 ldflags 注入。
 var Commit = "dev"

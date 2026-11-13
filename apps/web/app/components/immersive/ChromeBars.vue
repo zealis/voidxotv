@@ -1,5 +1,7 @@
 <script setup lang="ts">
-// 顶部栏与底部导航（Page 1）。直播入口位为首期演进预留，按 §6.1 不渲染、不留空占位。
+// 沉浸流顶部栏（关注 / 推荐）+ 底部主导航（Page 1）。
+// 底栏本体在 BottomNav.vue，普通工具页也复用它；这里只负责顶部的频道切换。
+// 直播入口位为首期演进预留，按 §6.1 不渲染、不留空占位。
 const props = withDefaults(defineProps<{
   channel?: 'follow' | 'recommend'
   showNav?: boolean
@@ -39,27 +41,7 @@ const emit = defineEmits<{
     </NuxtLink>
   </header>
 
-  <nav
-    v-if="props.showNav" class="bottom-nav vp-glass"
-    :class="{ 'bottom-nav--auto-hide': props.collapsed }"
-    aria-label="主导航"
-  >
-    <NuxtLink to="/" class="nav-item active" aria-label="首页">
-      <ImIcon name="home" :size="22" /><span>首页</span>
-    </NuxtLink>
-    <NuxtLink to="/search" class="nav-item" aria-label="发现">
-      <ImIcon name="discover" :size="22" /><span>发现</span>
-    </NuxtLink>
-    <NuxtLink to="/publish" class="nav-publish" aria-label="发布作品">
-      <ImIcon name="plus" :size="26" />
-    </NuxtLink>
-    <NuxtLink to="/messages" class="nav-item" aria-label="消息">
-      <ImIcon name="message" :size="22" /><span>消息</span>
-    </NuxtLink>
-    <NuxtLink to="/me" class="nav-item" aria-label="我的">
-      <ImIcon name="user" :size="22" /><span>我的</span>
-    </NuxtLink>
-  </nav>
+  <BottomNav v-if="props.showNav" :collapsed="props.collapsed" />
 </template>
 
 <style scoped>
@@ -106,53 +88,5 @@ const emit = defineEmits<{
   height: 44px;
   color: var(--vp-im-text-primary);
   text-decoration: none;
-}
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: var(--vp-im-z-controls);
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  align-items: center;
-  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
-  border-width: 1px 0 0;
-  border-radius: 0;
-}
-/* PC 端：视频播放中收起底栏，暂停后恢复。移动端（≤780px）不匹配这条规则，
-   底栏保持常驻，控制条也本来就在移动端隐藏，两者互不干扰。 */
-@media (min-width: 781px) {
-  .bottom-nav {
-    transition: opacity 200ms ease, transform 200ms ease, visibility 0s;
-  }
-  .bottom-nav--auto-hide {
-    opacity: 0;
-    transform: translateY(100%);
-    visibility: hidden;
-    pointer-events: none;
-    transition: opacity 200ms ease, transform 200ms ease, visibility 0s linear 200ms;
-  }
-}
-.nav-item {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  min-height: 44px;
-  color: var(--vp-im-text-secondary);
-  font-size: 11px;
-  text-decoration: none;
-}
-.nav-item.active { color: var(--vp-im-text-primary); }
-.nav-publish {
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 34px;
-  margin: 0 auto;
-  border-radius: 11px;
-  color: var(--vp-im-on-accent);
-  background: linear-gradient(120deg, var(--vp-im-accent), #a03bff);
-  box-shadow: 0 6px 18px rgba(255, 46, 126, 0.35);
 }
 </style>

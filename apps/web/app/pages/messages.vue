@@ -332,13 +332,16 @@ function when(value: string): string {
         </div>
       </template>
     </VpDialog>
+
+    <BottomNav />
   </main>
 </template>
 
 <style scoped>
 .inbox {
   min-height: 100dvh;
-  padding: 20px 20px 56px;
+  /* 底部留出底栏高度（60px）与一段呼吸间距，最后一条通知不会被压住。 */
+  padding: 20px 20px calc(84px + env(safe-area-inset-bottom));
   background: var(--vp-im-bg);
   color: var(--vp-im-text-primary);
 }

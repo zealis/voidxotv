@@ -540,6 +540,8 @@ async function submitAppeal() {
         </button>
       </div>
     </VpDialog>
+
+    <BottomNav />
   </main>
 </template>
 
