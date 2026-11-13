@@ -8,6 +8,7 @@ import { ApiError, errorMessage } from '~/composables/useApi'
 
 const { list, detail, following, follow, avatar, tags, caption, formatCount } = useFeed()
 const { state, applyServer, setFollowing, toggleLike, toggleFavorite } = useInteractions()
+const { open: openAuthDialog } = useAuthDialog()
 // 列表只带签名摘要，预载窗口内的 HLS 条目要补一次详情才能拿到 master playlist。
 const player = useImmersivePlayer({
   resolveMedia: async (item) => (await detail(item.slug)).media,
@@ -113,7 +114,7 @@ async function onLike(item: FeedItem) {
     item.stats.likes = Math.max(0, item.stats.likes + (liked ? 1 : -1))
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      notify('登录后才能点赞')
+      openAuthDialog('login', { reason: '登录后即可点赞' })
       return
     }
     notify(errorMessage(error))
@@ -126,7 +127,7 @@ async function onFavorite(item: FeedItem) {
     item.stats.favorites = Math.max(0, item.stats.favorites + (favorited ? 1 : -1))
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      notify('登录后才能收藏')
+      openAuthDialog('login', { reason: '登录后即可收藏' })
       return
     }
     notify(errorMessage(error))
@@ -276,7 +277,7 @@ async function onFollow(item: FeedItem) {
     notify(result.following ? `已关注 @${item.author.handle}` : `已取消关注 @${item.author.handle}`)
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      notify('登录后才能关注作者')
+      openAuthDialog('login', { reason: '登录后即可关注作者' })
       return
     }
     notify(errorMessage(error))

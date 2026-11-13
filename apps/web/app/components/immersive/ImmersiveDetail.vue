@@ -100,6 +100,7 @@ useHead(() => ({
 
 const { avatar, tags, caption, formatCount } = useFeed()
 const { state, applyServer, toggleLike, toggleFavorite, toggleFollow } = useInteractions()
+const { open: openAuthDialog } = useAuthDialog()
 const { api } = useApi()
 const player = useImmersivePlayer()
 // 服务端互动标记覆盖默认未点亮（§6.2）：详情带当前查看者的点赞 / 收藏。
@@ -205,7 +206,7 @@ async function onLike(entry: FeedItem) {
     entry.stats.likes = Math.max(0, entry.stats.likes + (liked ? 1 : -1))
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      notify('登录后才能点赞')
+      openAuthDialog('login', { reason: '登录后即可点赞' })
       return
     }
     notify(errorMessage(error))
@@ -218,7 +219,7 @@ async function onFavorite(entry: FeedItem) {
     entry.stats.favorites = Math.max(0, entry.stats.favorites + (favorited ? 1 : -1))
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      notify('登录后才能收藏')
+      openAuthDialog('login', { reason: '登录后即可收藏' })
       return
     }
     notify(errorMessage(error))
