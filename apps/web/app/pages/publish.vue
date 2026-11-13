@@ -21,6 +21,8 @@ interface Playback {
 }
 
 const { api, upload, getMe, logout, clearCsrf } = useApi()
+
+const { open: openAuthDialog } = useAuthDialog()
 const { preferences, load: loadPreferences } = usePreferences()
 const route = useRoute()
 
@@ -509,7 +511,7 @@ async function signOut() {
           </div>
           <button type="button" class="sign-out" @click="signOut">退出</button>
         </template>
-        <NuxtLink v-else-if="!checking" to="/login" class="rail-login">登录 / 注册</NuxtLink>
+        <button v-else-if="!checking" type="button" class="rail-login" @click="openAuthDialog()">登录 / 注册</button>
         <span v-else class="rail-user-text">正在检查登录…</span>
       </div>
     </aside>
@@ -524,8 +526,8 @@ async function signOut() {
       <section v-if="checking" class="gate">正在检查登录状态…</section>
       <section v-else-if="!me" class="gate">
         <h2>请先登录</h2>
-        <p>上传与发布需要会话及 CSRF 校验。</p>
-        <NuxtLink to="/login" class="primary-link">前往登录</NuxtLink>
+        <p>登录后即可上传、转码并发布作品。</p>
+        <button type="button" class="primary-link" @click="openAuthDialog()">前往登录</button>
       </section>
 
       <template v-else>
@@ -739,7 +741,7 @@ async function signOut() {
 .rail-user-text strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail-user-text a { font-size: 11px; color: var(--vp-tool-text-2); text-decoration: none; }
 .sign-out { flex: none; margin-left: auto; padding: 4px 7px; font-size: 10px; white-space: nowrap; border-radius: 6px; cursor: pointer; border: 1px solid var(--vp-tool-border-strong); background: transparent; color: var(--vp-tool-text-2); }
-.rail-login { color: var(--vp-tool-accent-ink); text-decoration: none; font-size: 12px; }
+.rail-login { border: 0; background: none; padding: 0; cursor: pointer; font-family: inherit; color: var(--vp-tool-accent-ink); text-decoration: none; font-size: 12px; }
 
 /* 中栏 */
 .stage-col { min-width: 0; padding: 26px 24px 40px; }
@@ -837,7 +839,7 @@ summary { cursor: pointer; color: var(--vp-tool-text-2); }
 .secondary:disabled { opacity: .55; cursor: not-allowed; }
 .draft-status { margin: 8px 0 0; font-size: 11px; color: var(--vp-tool-text-2); }
 .error { margin: 12px 0 0; padding: 9px 11px; border-radius: 8px; background: var(--vp-tool-danger-soft); color: var(--vp-tool-danger-ink); font-size: 12px; }
-.login-link, .primary-link { display: inline-block; padding: 9px 16px; border-radius: 9px; text-decoration: none; font-size: 13px; background: var(--vp-tool-accent); color: var(--vp-tool-on-accent); }
+.login-link, .primary-link { display: inline-block; padding: 9px 16px; border-radius: 9px; border: 0; cursor: pointer; font-family: inherit; text-decoration: none; font-size: 13px; background: var(--vp-tool-accent); color: var(--vp-tool-on-accent); }
 
 /* 窄屏 < 1024px：回落移动端沉浸内发布形态，不做三段式压缩硬撑（§8.1） */
 @media (max-width: 1023px) {

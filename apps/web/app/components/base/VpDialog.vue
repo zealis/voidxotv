@@ -11,7 +11,9 @@ const props = withDefaults(defineProps<{
   variant?: 'center' | 'sheet'
   /** 提交中：阻止 Escape / 外点关闭，避免写到一半被关掉 */
   busy?: boolean
-}>(), { variant: 'center', busy: false })
+  /** 打开时的优先焦点选择器（如 '.field input'）；缺省聚焦第一个可聚焦控件 */
+  initialFocus?: string
+}>(), { variant: 'center', busy: false, initialFocus: '' })
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -68,8 +70,12 @@ watch(() => props.open, async (open) => {
   if (open) {
     trigger = document.activeElement as HTMLElement | null
     await nextTick()
-    // 优先第一个可聚焦控件，没有则对话框本身（tabindex=-1 可脚本聚焦）。
-    ;(focusables()[0] ?? dialog.value)?.focus()
+    // 优先调用方指定的控件（登录框直接进输入框），否则第一个可聚焦控件，
+    // 都没有则对话框本身（tabindex=-1 可脚本聚焦）。
+    const preferred = props.initialFocus
+      ? dialog.value?.querySelector<HTMLElement>(props.initialFocus) ?? null
+      : null
+    ;(preferred ?? focusables()[0] ?? dialog.value)?.focus()
   } else {
     await nextTick()
     // 关闭后焦点必须回到触发控件；控件已卸载时回落到 body 不报错。

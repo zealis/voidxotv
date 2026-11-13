@@ -32,6 +32,8 @@ interface Profile {
 }
 
 const { api, upload, getMe } = useApi()
+
+const { open: openAuthDialog } = useAuthDialog()
 const { preferences, applyMotion, setTheme, adoptTheme, resolveTheme } = usePreferences()
 // 加载态由状态机统一管理；message 仍用于写操作（保存 / 改密）失败提示。
 const asyncState = useAsyncState()
@@ -285,7 +287,7 @@ async function changePassword() {
     pwd.open = false
     flashSaved('密码已更新，请重新登录')
     // 服务端已吊销全部会话（§11.4）：回登录页重新认证。
-    setTimeout(() => { navigateTo('/login') }, 1200)
+    setTimeout(() => { openAuthDialog('login', { reason: '密码已更新，请重新登录' }) }, 1200)
   } catch (error) {
     pwd.error = errorMessage(error)
   } finally {
@@ -323,7 +325,7 @@ onBeforeUnmount(() => {
 
     <section v-else-if="needLogin" class="gate">
       <p>登录后可以调整通知、隐私与播放偏好。</p>
-      <NuxtLink to="/login?redirect=%2Fsettings" class="cta">登录</NuxtLink>
+      <button type="button" class="cta" @click="openAuthDialog()">登录</button>
     </section>
 
     <VpAsyncState
@@ -588,7 +590,7 @@ onBeforeUnmount(() => {
 
 .hint, .gate { max-width: 720px; margin: 40px auto; text-align: center; color: var(--vp-tool-text-2); font-size: 13px; }
 .gate .cta {
-  display: inline-block; margin-top: 12px; padding: 9px 20px; border-radius: 99px;
+  display: inline-block; margin-top: 12px; padding: 9px 20px; border-radius: 99px; border: 0; cursor: pointer; font-family: inherit;
   background: var(--vp-tool-accent); color: var(--vp-tool-on-accent); text-decoration: none; font-size: 13px;
 }
 .notice {

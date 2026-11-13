@@ -30,6 +30,8 @@ const items = computed(() => data.value?.data.items || [])
 // 关注状态是「当前访客」的视角，不能进 SSR 结果（创作者页会被 Delivery 预渲染并公共缓存），
 // 所以挂载后再单独取一次，只影响本机 UI。
 const { api, getMe } = useApi()
+
+const { open: openAuthDialog } = useAuthDialog()
 const { followState, follow } = useFeed()
 
 const following = ref(false)
@@ -65,7 +67,7 @@ async function toggleFollow() {
     followerCount.value = state.follower_count
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      await navigateTo(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+      openAuthDialog('login', { reason: '登录后即可关注创作者', redirect: route.fullPath })
       return
     }
     followError.value = errorMessage(error)

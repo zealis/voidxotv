@@ -3,6 +3,8 @@
 // 私有页面：动态 SSR、禁止公共缓存、不参与索引。
 import { ApiError, errorMessage } from '~/composables/useApi'
 
+const { open: openAuthDialog } = useAuthDialog()
+
 useSeoMeta({ title: '我 · 夜街', robots: 'noindex,nofollow' })
 
 interface ContentItem {
@@ -366,7 +368,7 @@ async function submitAppeal() {
 
     <section v-else-if="needLogin" class="gate">
       <p>登录后管理自己的作品、查看审核结论与申诉进度。</p>
-      <NuxtLink to="/login?redirect=%2Fme" class="cta">登录</NuxtLink>
+      <button type="button" class="cta" @click="openAuthDialog()">登录</button>
     </section>
 
     <VpAsyncState
@@ -758,6 +760,7 @@ async function submitAppeal() {
 .gate { max-width: 820px; margin: 60px auto; text-align: center; }
 .gate p { margin: 0 0 14px; font-size: 13px; color: var(--vp-im-text-secondary); }
 .cta {
+  border: 0; cursor: pointer; font-family: inherit;
   display: inline-block; padding: 8px 20px; border-radius: 99px;
   background: var(--vp-im-accent); color: #fff; font-size: 13px; text-decoration: none;
 }

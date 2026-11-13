@@ -20,6 +20,14 @@ const REASONS = [
 ]
 
 const { api, getMe } = useApi()
+
+const { open: openAuthDialog } = useAuthDialog()
+
+// 未登录时引导去登录：先收起举报对话框，否则两个 VpDialog 会叠在一起。
+function goLogin() {
+  emit('close')
+  openAuthDialog('login')
+}
 const reason = ref('')
 const detail = ref('')
 const busy = ref(false)
@@ -73,7 +81,7 @@ async function submit() {
       处置结果将在「我 → 我的举报」反馈。
     </p>
     <p v-if="needLogin" class="dialog-text">
-      请先<RouterLink class="login" to="/login?redirect=%2F">登录</RouterLink>后再举报。
+      请先<button type="button" class="login" @click="goLogin">登录</button>后再举报。
     </p>
     <p v-else-if="checking" class="dialog-text" role="status">正在检查登录状态…</p>
     <template v-else>
@@ -102,7 +110,7 @@ async function submit() {
 
 <style scoped>
 .dialog-text { margin: 0 0 14px; font-size: 13px; line-height: 1.7; }
-.login { color: var(--vp-tool-accent, #ff2e7e); }
+.login { border: 0; background: none; padding: 0; cursor: pointer; font-family: inherit; font-size: inherit; color: var(--vp-tool-accent, #ff2e7e); text-decoration: underline; }
 .reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; padding: 0; border: 0; }
 .reason {
   display: flex; align-items: center; gap: 8px;

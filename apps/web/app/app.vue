@@ -28,6 +28,8 @@ useHead(() => ({
 
 <template>
   <NuxtPage />
+  <!-- 登录 / 注册弹窗挂在这里：前台任何页面都能唤起，不打断当前内容。 -->
+  <VpAuthDialog />
 </template>
 
 <style>

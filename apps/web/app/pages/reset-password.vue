@@ -6,6 +6,8 @@ useSeoMeta({ title: '找回密码 · 夜街', robots: 'noindex,nofollow' })
 
 const { api } = useApi()
 
+const { open: openAuthDialog } = useAuthDialog()
+
 const step = ref<'request' | 'confirm' | 'done'>('request')
 const handle = ref('')
 const email = ref('')
@@ -147,10 +149,10 @@ async function confirmReset() {
       <template v-else>
         <h1>密码已重置</h1>
         <p class="hint">所有已登录的会话都已退出，请用新密码重新登录。</p>
-        <NuxtLink class="primary link" to="/login">前往登录</NuxtLink>
+        <button type="button" class="primary link" @click="openAuthDialog('login', { reason: '请用新密码登录', redirect: '/publish' })">前往登录</button>
       </template>
 
-      <footer>验证码只存服务端缓存 · 邮件经队列异步投递</footer>
+      <footer>验证码 10 分钟内有效，请勿转发给他人。</footer>
     </section>
   </main>
 </template>
@@ -197,6 +199,6 @@ input:focus { outline: none; border-color: var(--vp-color-brand); }
   padding: 10px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 9px;
   background: transparent; color: var(--vp-im-text-secondary); cursor: pointer; font-size: 13px;
 }
-.link { display: block; text-align: center; text-decoration: none; }
+.link { display: block; width: 100%; text-align: center; text-decoration: none; font-family: inherit; }
 footer { margin-top: 22px; font-size: 11px; color: var(--vp-im-text-secondary); text-align: center; }
 </style>

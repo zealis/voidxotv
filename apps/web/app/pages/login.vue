@@ -95,7 +95,7 @@ async function submit() {
         <NuxtLink to="/reset-password">忘记密码？</NuxtLink>
       </p>
 
-      <footer>会话使用 HttpOnly Cookie · 写操作需 CSRF 双提交校验</footer>
+      <footer>登录状态仅保存在本机，退出后即失效。</footer>
     </section>
   </main>
 </template>

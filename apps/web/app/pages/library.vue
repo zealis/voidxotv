@@ -3,6 +3,8 @@
 // 收藏复用 reactions(kind='favorite') 的 /me/favorites；历史与稍后再看是独立表。
 import { ApiError, errorMessage } from '~/composables/useApi'
 
+const { open: openAuthDialog } = useAuthDialog()
+
 useSeoMeta({ title: '个人库 · 夜街', robots: 'noindex,nofollow' })
 
 type TabKey = 'history' | 'favorites' | 'watchlist'
@@ -136,7 +138,7 @@ onMounted(async () => {
 
     <section v-else-if="needLogin" class="gate">
       <p>登录后查看历史、收藏与稍后再看。</p>
-      <NuxtLink to="/login?redirect=%2Flibrary" class="cta">登录</NuxtLink>
+      <button type="button" class="cta" @click="openAuthDialog()">登录</button>
     </section>
 
     <VpAsyncState
@@ -206,6 +208,7 @@ onMounted(async () => {
 .gate { max-width: 760px; margin: 40px auto; text-align: center; }
 .gate p { margin: 0 0 14px; font-size: 13px; color: var(--vp-im-text-secondary); }
 .cta {
+  border: 0; cursor: pointer; font-family: inherit;
   display: inline-block; padding: 8px 20px; border-radius: 99px;
   background: var(--vp-im-accent); color: #fff; font-size: 13px; text-decoration: none;
 }

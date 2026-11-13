@@ -9,6 +9,8 @@ useSeoMeta({
   robots: 'noindex,nofollow',
 })
 
+const { open: openAuthDialog } = useAuthDialog()
+
 interface Category {
   id: number
   slug: string
@@ -258,7 +260,7 @@ function linkOf(item: FeedItem) {
     <section v-else-if="needLogin" class="gate">
       <h1>搜索需要登录</h1>
       <p>为限制自动化刷取与资源消耗，夜街的搜索仅对已登录账号开放。</p>
-      <NuxtLink :to="`/login?redirect=${encodeURIComponent(route.fullPath)}`" class="cta">登录后搜索</NuxtLink>
+      <button type="button" class="cta" @click="openAuthDialog()">登录后搜索</button>
     </section>
 
     <template v-else>
@@ -379,7 +381,7 @@ function linkOf(item: FeedItem) {
 .gate h1 { margin: 0 0 8px; font-size: 20px; }
 .gate p { margin: 0 0 18px; font-size: 13px; color: var(--vp-im-text-secondary); }
 .cta {
-  display: inline-block; padding: 9px 20px; border-radius: 99px;
+  display: inline-block; padding: 9px 20px; border-radius: 99px; border: 0; cursor: pointer; font-family: inherit;
   background: var(--vp-im-accent); color: #fff; font-size: 13px; text-decoration: none;
 }
 .hot h2 .clear,

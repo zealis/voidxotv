@@ -3,6 +3,8 @@
 // 计数区（获赞 / 关注 / 粉丝）点击进入对应列表）。
 import { ApiError, errorMessage } from '~/composables/useApi'
 
+const { open: openAuthDialog } = useAuthDialog()
+
 useSeoMeta({ title: '关系 · 夜街', robots: 'noindex,nofollow' })
 
 type RelationKind = 'following' | 'followers' | 'likes'
@@ -148,7 +150,7 @@ onMounted(async () => {
 
     <section v-else-if="needLogin" class="gate">
       <p>登录后查看关注、粉丝与获赞记录。</p>
-      <NuxtLink to="/login?redirect=%2Fme%2Frelations" class="cta">登录</NuxtLink>
+      <button type="button" class="cta" @click="openAuthDialog()">登录</button>
     </section>
 
     <template v-else>
@@ -247,6 +249,7 @@ onMounted(async () => {
 }
 .gate { max-width: 720px; margin: 40px auto; text-align: center; color: var(--vp-im-text-secondary); font-size: 13px; }
 .gate .cta {
+  border: 0; cursor: pointer; font-family: inherit;
   display: inline-block; margin-top: 12px; padding: 9px 20px; border-radius: 99px;
   background: var(--vp-im-accent); color: #fff; text-decoration: none; font-size: 13px;
 }

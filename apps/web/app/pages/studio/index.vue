@@ -2,6 +2,8 @@
 // 创作者中心 · 数据看板（UI 规范 §11.1 / §11.2：工具型页面，信息密度优先）。
 // 数据口径：播放按天增量、点赞评论按事件时间、新增粉丝按关注时间，全部东八区自然日。
 
+const { open: openAuthDialog } = useAuthDialog()
+
 useSeoMeta({ title: '创作中心 · 夜街', robots: 'noindex,nofollow' })
 
 interface Counts {
@@ -176,7 +178,7 @@ onMounted(async () => {
 
     <section v-else-if="needLogin" class="gate">
       <p>登录后查看播放、点赞与粉丝变化。</p>
-      <NuxtLink to="/login?redirect=%2Fstudio" class="cta">登录</NuxtLink>
+      <button type="button" class="cta" @click="openAuthDialog()">登录</button>
     </section>
 
     <template v-else>
@@ -361,7 +363,7 @@ onMounted(async () => {
 .metrics b { color: var(--vp-tool-text); font-weight: 600; margin-right: 2px; }
 
 .hint, .gate { max-width: var(--vp-layout-content-max); margin: 40px auto; text-align: center; font-size: 13px; color: var(--vp-tool-text-2); }
-.gate .cta { display: inline-block; margin-top: 12px; padding: 9px 20px; border-radius: 99px; background: var(--vp-tool-accent); color: var(--vp-tool-on-accent); text-decoration: none; font-size: 13px; }
+.gate .cta { display: inline-block; margin-top: 12px; padding: 9px 20px; border-radius: 99px; border: 0; cursor: pointer; font-family: inherit; background: var(--vp-tool-accent); color: var(--vp-tool-on-accent); text-decoration: none; font-size: 13px; }
 .notice { max-width: var(--vp-layout-content-max); margin: 0 auto 12px; padding: 10px 12px; border-radius: 10px; background: var(--vp-tool-danger-soft); color: var(--vp-tool-danger-ink); font-size: 12px; box-sizing: border-box; }
 .empty { margin: 18px 0; font-size: 12px; color: var(--vp-tool-text-2); text-align: center; }
 .empty a { color: var(--vp-tool-accent-ink); }

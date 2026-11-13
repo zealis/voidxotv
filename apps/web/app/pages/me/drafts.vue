@@ -3,6 +3,8 @@
 // 草稿不进入任何公开查询与统计；删除是软删除，保留统计与申诉引用。
 import { errorMessage } from '~/composables/useApi'
 
+const { open: openAuthDialog } = useAuthDialog()
+
 useSeoMeta({ title: '草稿箱 · 夜街', robots: 'noindex,nofollow' })
 
 interface Draft {
@@ -175,7 +177,7 @@ onMounted(async () => {
 
     <section v-else-if="needLogin" class="gate">
       <p>登录后查看并继续编辑草稿。</p>
-      <NuxtLink to="/login?redirect=%2Fme%2Fdrafts" class="cta">登录</NuxtLink>
+      <button type="button" class="cta" @click="openAuthDialog()">登录</button>
     </section>
 
     <VpAsyncState
@@ -305,6 +307,7 @@ onMounted(async () => {
 }
 .hint, .gate { max-width: 820px; margin: 40px auto; text-align: center; font-size: 13px; color: var(--vp-im-text-secondary); }
 .gate .cta {
+  border: 0; cursor: pointer; font-family: inherit;
   display: inline-block; margin-top: 12px; padding: 9px 20px; border-radius: 99px;
   background: var(--vp-im-accent); color: var(--vp-im-on-accent);
   text-decoration: none; font-size: 13px;
