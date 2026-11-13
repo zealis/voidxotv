@@ -230,7 +230,11 @@ const statusMeta: Record<string, { text: string; tone: Tone }> = {
 .user-table { --el-table-bg-color: transparent; --el-table-tr-bg-color: transparent; }
 .handle { font-size: 13px; font-weight: 600; color: #f4f4f5; }
 .sub { font-size: 11px; color: #8b8b93; }
-.row-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Element Plus 给相邻按钮加 margin-left:12px，它和 gap 叠加后换行不会归零，
+   窄屏下第二行开头（例如「头像」）会比第一行的「警告」右移 12px。
+   间距统一交给 gap，按钮自身不再保留左边距。 */
+.row-actions :deep(.el-button + .el-button) { margin-left: 0; }
 .dialog-tip { margin: 0 0 12px; font-size: 12px; line-height: 1.7; color: #a1a1aa; }
 .dialog-error { margin: 8px 0 0; font-size: 12px; color: #fb7185; }
 </style>
