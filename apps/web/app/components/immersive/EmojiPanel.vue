@@ -163,4 +163,21 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
 }
 .emoji-cell:hover { background: rgba(255, 255, 255, 0.1); }
 .emoji-cell img { width: 26px; height: 26px; display: block; }
+
+/* 窄屏：不再是一张挂在表情按钮左边的 340px 卡片（会向左溢出屏幕、右侧留一大块空），
+   而是横向铺满整条输入区，左右与输入框对齐。锚点由 CommentSheet 的
+   `.composer .pickers { position: static }` 切到 .composer 上。 */
+/* 窄屏：不再是一张挂在表情按钮左边的 340px 卡片（会向左溢出屏幕、右侧留一大块空），
+   而是横向铺满整屏、像键盘一样贴着两条边——这样 8 个分类也刚好不需要横向滚动。
+   锚点由 CommentSheet 的 `.composer .pickers { position: static }` 切到 .composer 上。 */
+@media (max-width: 560px) {
+  .emoji-panel {
+    left: 0;
+    right: 0;
+    width: auto;
+  }
+  .emoji-cell img { width: 28px; height: 28px; }
+  /* 分类标签左右收 2px（10 → 8）：8 个两字分类在 360px 上正好排得下，不用滚动。 */
+  .emoji-tabs button { padding: 6px 8px; }
+}
 </style>

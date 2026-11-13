@@ -555,6 +555,8 @@ function isMine(item: { user_id: number; id: number }): boolean {
 .expand.more { display: block; margin: 4px 0 0 36px; }
 .expand:disabled { opacity: 0.5; cursor: not-allowed; }
 .composer {
+  /* 移动端表情面板要以整条输入区为定位基准（见 EmojiPanel 的媒体查询）。 */
+  position: relative;
   padding: 8px 16px calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--vp-im-glass-border);
   background: var(--vp-im-surface);
@@ -607,12 +609,16 @@ function isMine(item: { user_id: number; id: number }): boolean {
   cursor: pointer;
 }
 .composer button[type="submit"]:disabled { opacity: 0.45; cursor: not-allowed; }
-/* 表情面板以这里为定位锚点（面板向右对齐、浮在输入区上方）。 */
+/* 表情面板以这里为定位锚点（面板向右对齐、浮在输入区上方）。
+   窄屏时改成 static，让面板去以整条 .composer 为基准铺满一行，见 EmojiPanel。 */
 .composer .pickers {
   position: relative;
   display: flex;
   align-items: center;
   flex: 0 0 auto;
+}
+@media (max-width: 560px) {
+  .composer .pickers { position: static; }
 }
 .composer .pick {
   display: grid;
