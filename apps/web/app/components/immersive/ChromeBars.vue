@@ -1,8 +1,14 @@
 <script setup lang="ts">
 // 顶部栏与底部导航（Page 1）。直播入口位为首期演进预留，按 §6.1 不渲染、不留空占位。
-const props = withDefaults(defineProps<{ channel?: 'follow' | 'recommend'; showNav?: boolean }>(), {
+const props = withDefaults(defineProps<{
+  channel?: 'follow' | 'recommend'
+  showNav?: boolean
+  // PC 端播放时底栏自动收起，暂停时恢复；移动端始终显示（由 CSS 断点控制）。
+  playing?: boolean
+}>(), {
   channel: 'recommend',
   showNav: true,
+  playing: false,
 })
 const emit = defineEmits<{
   'update:channel': [value: 'follow' | 'recommend']
@@ -32,7 +38,11 @@ const emit = defineEmits<{
     </NuxtLink>
   </header>
 
-  <nav v-if="props.showNav" class="bottom-nav vp-glass" aria-label="主导航">
+  <nav
+    v-if="props.showNav" class="bottom-nav vp-glass"
+    :class="{ 'bottom-nav--auto-hide': props.playing }"
+    aria-label="主导航"
+  >
     <NuxtLink to="/" class="nav-item active" aria-label="首页">
       <ImIcon name="home" :size="22" /><span>首页</span>
     </NuxtLink>
@@ -108,6 +118,20 @@ const emit = defineEmits<{
   padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
   border-width: 1px 0 0;
   border-radius: 0;
+}
+/* PC 端：视频播放中收起底栏，暂停后恢复。移动端（≤780px）不匹配这条规则，
+   底栏保持常驻，控制条也本来就在移动端隐藏，两者互不干扰。 */
+@media (min-width: 781px) {
+  .bottom-nav {
+    transition: opacity 200ms ease, transform 200ms ease, visibility 0s;
+  }
+  .bottom-nav--auto-hide {
+    opacity: 0;
+    transform: translateY(100%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 200ms ease, transform 200ms ease, visibility 0s linear 200ms;
+  }
 }
 .nav-item {
   display: grid;

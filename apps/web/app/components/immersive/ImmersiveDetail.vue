@@ -224,7 +224,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="detail-root" data-surface="immersive">
-    <ChromeBars :show-nav="true" />
+    <ChromeBars :show-nav="true" :playing="player.state.playing" />
 
     <div v-if="error || !item" class="state">
       <h1>这条作品暂时看不到</h1>

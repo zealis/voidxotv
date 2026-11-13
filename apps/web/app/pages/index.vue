@@ -273,7 +273,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="feed-root" data-surface="immersive">
-    <ChromeBars v-model:channel="channel" />
+    <ChromeBars v-model:channel="channel" :playing="player.state.playing" />
 
     <div ref="scroller" class="scroller" :inert="sheetOpen || undefined">
       <div
