@@ -23,6 +23,40 @@ const actionLabels: Record<string, string> = {
   warn: '警告', mute: '禁言', ban: '封禁', unban: '解封', verify_creator: '创作者认证',
 }
 
+// 从 6 张随机 DiceBear 头像里给指定用户挑一张（复用前台同一个候选组件与后端写入逻辑）。
+const avatarDialog = reactive({
+  open: false,
+  user: null as AdminUserRow | null,
+  seed: '',
+  pending: false,
+  error: '',
+})
+
+function openAvatarDialog(raw: unknown) {
+  avatarDialog.open = true
+  avatarDialog.user = raw as AdminUserRow
+  avatarDialog.seed = ''
+  avatarDialog.error = ''
+}
+
+async function applyAvatar() {
+  if (!avatarDialog.user || !avatarDialog.seed) return
+  avatarDialog.pending = true
+  avatarDialog.error = ''
+  try {
+    await request(`/api/v1/admin/users/${avatarDialog.user.id}/avatar`, {
+      method: 'POST', body: { seed: avatarDialog.seed }, csrf: true,
+    })
+    ElMessage.success(`已更新 @${avatarDialog.user.handle} 的头像`)
+    avatarDialog.open = false
+    await load()
+  } catch (cause) {
+    avatarDialog.error = cause instanceof Error ? cause.message : '操作失败'
+  } finally {
+    avatarDialog.pending = false
+  }
+}
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -145,11 +179,28 @@ const statusMeta: Record<string, { text: string; tone: Tone }> = {
               v-if="scope.row.role !== 'creator'" size="small" plain type="primary"
               @click="openDialog(scope.row, 'verify_creator')"
             >认证</ElButton>
+            <ElButton size="small" plain @click="openAvatarDialog(scope.row)">头像</ElButton>
           </div>
           <span v-else class="sub">只读角色</span>
         </template>
       </ElTableColumn>
     </ElTable>
+
+    <ElDialog
+      v-model="avatarDialog.open"
+      :title="`设置 @${avatarDialog.user?.handle || ''} 的头像`"
+      width="400px"
+    >
+      <AvatarPicker :selected="avatarDialog.seed" @select="avatarDialog.seed = $event" />
+      <p v-if="avatarDialog.error" class="dialog-error">{{ avatarDialog.error }}</p>
+      <template #footer>
+        <ElButton @click="avatarDialog.open = false">取消</ElButton>
+        <ElButton
+          type="primary" :loading="avatarDialog.pending"
+          :disabled="!avatarDialog.seed" @click="applyAvatar"
+        >使用这张</ElButton>
+      </template>
+    </ElDialog>
 
     <ElDialog v-model="dialog.open" :title="`${actionLabels[dialog.action]} @${dialog.user?.handle || ''}`" width="440px">
       <p class="dialog-tip">处置动作写入审计日志，并同时向用户发送站内通知。</p>

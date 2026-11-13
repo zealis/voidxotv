@@ -54,6 +54,11 @@ node scripts/dev.mjs stop all      # 停止
 
 - 实现：`internal/modules/auth/default_avatar.go`，由 `cmd/api/main.go` 在 S3 可用时注入；
   S3 不可用或 DiceBear 超时/失败时只记 WARN，注册照常成功，前端回落占位头像。
+- 手动选择：设置页「随机头像」与后台「用户管理 → 头像」都提供 **6 张随机候选**，可「换一批」再挑。
+  预览走同源代理 `GET /api/v1/avatar/preview?seed=…`（前端 CSP 不允许外链 `<img>`，
+  且只接受 24 位 hex seed）；选定后由 `POST /api/v1/me/avatar/random` 或
+  `POST /api/v1/admin/users/{id}/avatar` 下载并落库。共用
+  `internal/platform/avatar` 的下载校验与 `settings.Handler.SetRandomAvatar` 的写入实现。
 - 异步且幂等：写库条件是 `avatar_key IS NULL`，不会覆盖用户在异步任务完成前自己上传的头像；
   写库失败会删掉刚上传的对象，不留孤儿。
 - 只作用于**新注册用户**；存量用户与 seed 数据保持原状。

@@ -308,7 +308,15 @@ type Handler struct {
 	log        *slog.Logger
 	store      StoreResolver
 	aggregator Aggregator
+	// avatarSetter 由组装层注入（复用 settings 的随机头像写入逻辑）。
+	avatarSetter AvatarSetter
 }
+
+// AvatarSetter 给指定用户设置一张随机头像；返回签名地址。
+type AvatarSetter func(ctx context.Context, userID int64, seed string) (string, error)
+
+// SetAvatarSetter 注入写入能力；S3 不可用时不注入，后台头像入口返回 503。
+func (h *Handler) SetAvatarSetter(fn AvatarSetter) { h.avatarSetter = fn }
 
 func NewHandler(repo *Repository, sessions *SessionStore, cfg config.Config, log *slog.Logger,
 	store StoreResolver, aggregator Aggregator) *Handler {

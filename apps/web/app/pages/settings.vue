@@ -51,6 +51,36 @@ const quietOn = ref(false)
 const quietStart = ref(1320)
 const quietEnd = ref(480)
 
+// 随机头像 6 选 1：预览走同源代理，选定后才由后端下载并存进头像体系。
+const randomAvatarOpen = ref(false)
+const pickedSeed = ref('')
+const randomAvatarBusy = ref(false)
+
+function openRandomAvatar() {
+  pickedSeed.value = ''
+  randomAvatarOpen.value = true
+}
+
+async function applyRandomAvatar() {
+  if (!pickedSeed.value) return
+  randomAvatarBusy.value = true
+  message.value = ''
+  try {
+    const result = await api<{ avatar_url: string }>('/api/v1/me/avatar/random', {
+      method: 'POST', body: { seed: pickedSeed.value },
+    })
+    avatarUrl.value = result?.avatar_url || ''
+    if (profile.value) profile.value.avatar_url = avatarUrl.value
+    clearAvatarPreview()
+    randomAvatarOpen.value = false
+    message.value = '头像已更新'
+  } catch (error) {
+    message.value = errorMessage(error)
+  } finally {
+    randomAvatarBusy.value = false
+  }
+}
+
 const loading = ref(true)
 const saving = ref(false)
 const profileSaving = ref(false)
@@ -359,6 +389,10 @@ onBeforeUnmount(() => {
               />
             </label>
             <button
+              v-if="!avatarBusy" type="button" class="avatar-btn ghost"
+              @click="openRandomAvatar"
+            >随机头像</button>
+            <button
               v-if="avatarUrl && !avatarBusy" type="button" class="avatar-btn ghost"
               @click="removeAvatar"
             >移除</button>
@@ -553,6 +587,20 @@ onBeforeUnmount(() => {
 
     <!-- 版本号：排障/反馈时报这个，对应 CHANGELOG.md 里的同名版本条目。 -->
     <p class="version-foot">夜街 v{{ appVersion }}</p>
+
+    <VpDialog
+      :open="randomAvatarOpen" title="选一张随机头像" :busy="randomAvatarBusy"
+      @close="randomAvatarOpen = false"
+    >
+      <AvatarPicker :selected="pickedSeed" @select="pickedSeed = $event" />
+      <div class="dialog-actions">
+        <button type="button" class="btn" @click="randomAvatarOpen = false">取消</button>
+        <button
+          type="button" class="btn primary"
+          :disabled="!pickedSeed || randomAvatarBusy" @click="applyRandomAvatar"
+        >{{ randomAvatarBusy ? '保存中…' : '使用这张' }}</button>
+      </div>
+    </VpDialog>
 
     <VpDialog :open="pwd.open" title="修改密码" :busy="pwd.busy" @close="pwd.open = false">
         <label class="field">

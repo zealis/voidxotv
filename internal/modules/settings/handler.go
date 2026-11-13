@@ -59,6 +59,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		h.auth.RequireAuth(h.auth.RequireCSRF(http.HandlerFunc(h.changePassword))))
 	mux.Handle("POST /api/v1/me/avatar",
 		h.auth.RequireAuth(h.auth.RequireCSRF(http.HandlerFunc(h.uploadAvatar))))
+	// 随机头像 6 选 1：预览走同源 /api/v1/avatar/preview，选中后在这里落库。
+	mux.Handle("POST /api/v1/me/avatar/random",
+		h.auth.RequireAuth(h.auth.RequireCSRF(http.HandlerFunc(h.randomAvatar))))
 	mux.Handle("DELETE /api/v1/me/avatar",
 		h.auth.RequireAuth(h.auth.RequireCSRF(http.HandlerFunc(h.deleteAvatar))))
 }

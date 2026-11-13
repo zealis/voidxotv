@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yejie/voidxotv/internal/platform/avatar"
 	"github.com/yejie/voidxotv/internal/platform/config"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 )
@@ -58,6 +59,28 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/auth/captcha", h.captcha)
 	mux.HandleFunc("POST /api/v1/auth/password/reset-request", h.resetRequestCode)
 	mux.HandleFunc("POST /api/v1/auth/password/reset", h.resetConfirmHandler)
+	// 随机头像预览代理：前端 CSP 只允许 'self' 与自有媒体源，不能直接 <img> 外链
+	// dicebear.com；这里按 seed 同源回一张 PNG，选中后才由写入接口落库。
+	mux.HandleFunc("GET /api/v1/avatar/preview", h.avatarPreview)
+}
+
+// avatarPreview 是只读的图片代理，只接受本系统生成的 12 字节 hex seed。
+func (h *Handler) avatarPreview(w http.ResponseWriter, r *http.Request) {
+	seed := r.URL.Query().Get("seed")
+	if !avatar.ValidSeed(seed) {
+		http.Error(w, "invalid seed", http.StatusBadRequest)
+		return
+	}
+	data, err := avatar.FetchPNG(r.Context(), seed)
+	if err != nil {
+		h.log.Warn("avatar preview failed", "error", err)
+		http.Error(w, "avatar unavailable", http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", avatar.CacheHeader)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 type registerRequest struct {
@@ -83,7 +106,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	// 用独立的 context + 超时，避免请求结束后 r.Context() 被取消导致任务半途而废。
 	if h.defaultAvatar != nil {
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), defaultAvatarTTL+2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), AssignTTL)
 			defer cancel()
 			h.defaultAvatar.Assign(ctx, user.ID, user.Handle)
 		}()

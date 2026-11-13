@@ -39,6 +39,32 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.12.0] - 2026-11-13
+
+### 新增
+
+- **随机头像 6 选 1**：前台「设置 → 头像」与后台「用户管理」都能打开一个 6 张
+  DiceBear Micah 随机头像的选择器，可「换一批」再挑，选定后下载到自有对象存储并设为头像。
+  前台给自己换，后台给指定用户换，两处共用同一个 `AvatarPicker` 组件与同一份写入逻辑。
+- `GET /api/v1/avatar/preview?seed=…`：同源图片代理。前端 CSP 只允许 `'self'` 与自有媒体源，
+  直接 `<img src="https://api.dicebear.com/...">` 会被拦，所以由后端按 seed 回一张 PNG；
+  只接受本系统生成的 24 位 hex seed，非法参数返回 400。
+- `POST /api/v1/me/avatar/random` 与 `POST /api/v1/admin/users/{id}/avatar`：
+  提交选中的 seed，下载 / 存对象 / 写 `avatar_key` / 删旧图，返回新的签名地址。
+  后台端点走 `users:sanction` 权限与 CSRF 校验。
+
+### 重构
+
+- 把 DiceBear seed 生成、PNG 下载校验、对象 key 命名抽到 `internal/platform/avatar`，
+  注册默认头像、前台随机头像、后台随机头像三处共用，去掉重复的 HTTP 与校验代码。
+- `settings.Handler.SetRandomAvatar` 作为唯一写入实现，由 `cmd/api/main.go` 通过
+  `admin.Handler.SetAvatarSetter` 注入后台；后台模块不需要自己持有对象存储与写库逻辑。
+
+### 改进
+
+- 「换一批」会清空当前选择，确认按钮回到禁用态，避免拿旧 seed 保存新一批里的其它头像。
+- 保存失败（S3 不可用、seed 不合法）不会留下无人引用的对象；覆盖头像时删掉旧对象。
+
 ## [0.11.0] - 2026-11-13
 
 ### 新增

@@ -55,6 +55,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.Handle("GET /api/v1/admin/users", h.wrap(PermUserRead, false, h.users))
 	mux.Handle("POST /api/v1/admin/users/{id}/sanction", h.wrap(PermUserSanction, true, h.sanctionUser))
+	mux.Handle("POST /api/v1/admin/users/{id}/avatar", h.wrap(PermUserSanction, true, h.setUserAvatar))
 
 	mux.Handle("GET /api/v1/admin/topics", h.wrap(PermTopicRead, false, h.topics))
 	mux.Handle("POST /api/v1/admin/topics", h.wrap(PermTopicWrite, true, h.createTopic))
