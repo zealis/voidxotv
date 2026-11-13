@@ -164,7 +164,11 @@ export function useAdminApi() {
         || (error as { response?: { status?: number } }).response?.status
       if (status === 401) session.value = null
       const body = (error as { data?: { error?: { message?: string } } }).data
-      throw new Error(body?.error?.message || `请求失败${status ? `（HTTP ${status}）` : ''}`)
+      // 后台同样不向界面暴露 HTTP 状态、英文内部错误等开发术语。
+      const raw = body?.error?.message || ''
+      const clean = raw && /[\u4e00-\u9fff]/.test(raw)
+        && !/HTTP|CSRF|token|sql|undefined|null|internal|unexpected|invalid|timeout/i.test(raw)
+      throw new Error(clean ? raw : '请求失败，请稍后再试')
     }
   }
 
