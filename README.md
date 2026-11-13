@@ -68,6 +68,25 @@ node scripts/dev.mjs stop all      # 停止
 风格与 API 见 [DiceBear Micah](https://www.dicebear.com/styles/micah/)。
 设置页的头像区域也展示了同样的署名。
 
+## 评论表情
+
+评论输入框的表情按钮打开 Twemoji 面板（8 个分类、228 个表情），选中后插入到光标处；
+评论正文里的表情渲染成同源 SVG，清单外的表情回落系统字体。
+
+- **为什么自托管**：前端 CSP 是 `img-src 'self' data: blob:`，外链图片会被拦；
+  自托管也不依赖第三方 CDN 的可用性。
+- **清单唯一事实来源**：`apps/web/app/data/emoji.json`。加表情只需往分类里加字符，再跑
+  `npm run emoji:sync`（`scripts/sync-emoji.mjs`）从 `参考资料/twemoji-14.0.2` 复制对应 SVG 到
+  `apps/web/public/emoji/`，并校验有没有缺失。`参考资料/` 是 16MB 素材源，不入库。
+- **文件名规则**：Twemoji 用 code point 十六进制序列命名，变体选择符 `FE0F` 省略
+  （`❤️` → `2764.svg`）；`emojiSrc()` 做同样的归一化，让 `❤` 与 `❤️` 命中同一张图。
+- **插入而不是替换**：按光标位置插入并恢复光标，输入框 `maxlength=200` 由代码兜底。
+- `@` 提及仍是占位入口（`disabled`），功能未实现。
+
+**署名**：图形来自 [Twemoji](https://github.com/jdecked/twemoji) 14.0.2，
+按 [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) 授权；
+许可证随资源放在 `apps/web/public/emoji/LICENSE-GRAPHICS`。
+
 ## 版本与更新日志
 
 - 版本号的事实来源是根目录 [`VERSION`](VERSION)，变更记录见 [`CHANGELOG.md`](CHANGELOG.md)。

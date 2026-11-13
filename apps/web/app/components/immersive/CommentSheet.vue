@@ -161,6 +161,7 @@ async function submit() {
   }
   sentDraft.value = text
   draft.value = ''
+  emojiOpen.value = false
   posting.value = true
   try {
     const created = await api<CommentItem>(`/api/v1/contents/${props.contentId}/comments`, {
@@ -234,12 +235,64 @@ async function remove(commentId: number) {
 
 const MENTION = /^@[a-zA-Z0-9_]{3,32}$/
 
-function tokens(body: string): { text: string; mention: boolean }[] {
+const emojiOpen = ref(false)
+const emojiAnchor = ref<HTMLElement | null>(null)
+
+function toggleEmoji() {
+  emojiOpen.value = !emojiOpen.value
+  if (emojiOpen.value) nextTick(() => input.value?.focus())
+}
+
+// 插到光标处而不是末尾：用户可能先写了字、再回来补表情。
+// 输入框 maxlength=200，直接赋值不受它约束，所以这里自己挡一道。
+function insertEmoji(char: string) {
+  const element = input.value
+  if (draft.value.length + char.length > 200) return
+  if (!element) {
+    draft.value += char
+    return
+  }
+  const start = element.selectionStart ?? draft.value.length
+  const end = element.selectionEnd ?? start
+  draft.value = draft.value.slice(0, start) + char + draft.value.slice(end)
+  nextTick(() => {
+    element.focus()
+    const caret = start + char.length
+    element.setSelectionRange(caret, caret)
+  })
+}
+
+// 点面板以外的地方收起；面板与触发按钮都在 emojiAnchor 里。
+function onDocPointerDown(event: PointerEvent) {
+  if (!emojiOpen.value) return
+  const target = event.target as Node | null
+  if (target && emojiAnchor.value?.contains(target)) return
+  emojiOpen.value = false
+}
+onMounted(() => document.addEventListener('pointerdown', onDocPointerDown))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocPointerDown))
+
+interface Token {
+  text: string
+  mention: boolean
+  emoji: boolean
+}
+
+function tokens(body: string): Token[] {
+  const result: Token[] = []
   // split 带捕获组：奇数位是 @handle；纯文本不可能命中 mention 形态。
-  return body
-    .split(/(@[a-zA-Z0-9_]{3,32})/g)
-    .filter((part) => part !== '')
-    .map((part) => ({ text: part, mention: MENTION.test(part) }))
+  for (const part of body.split(/(@[a-zA-Z0-9_]{3,32})/g)) {
+    if (part === '') continue
+    if (MENTION.test(part)) {
+      result.push({ text: part, mention: true, emoji: false })
+      continue
+    }
+    // 普通片段再按表情切开：表情单独渲染成 Twemoji 图片，文字保持可选择。
+    for (const piece of splitEmoji(part)) {
+      result.push({ text: piece.value, mention: false, emoji: piece.type === 'emoji' })
+    }
+  }
+  return result
 }
 
 function when(value: string): string {
@@ -275,6 +328,10 @@ function isMine(item: { user_id: number; id: number }): boolean {
             <p :class="{ pending: comment.pending }">
               <template v-for="(tk, i) in tokens(comment.body)" :key="i">
                 <span v-if="tk.mention" class="mention">{{ tk.text }}</span>
+                <img
+                  v-else-if="tk.emoji && emojiSrc(tk.text)" class="emoji"
+                  :src="emojiSrc(tk.text)!" :alt="tk.text"
+                />
                 <template v-else>{{ tk.text }}</template>
               </template>
             </p>
@@ -299,6 +356,10 @@ function isMine(item: { user_id: number; id: number }): boolean {
                       <span v-if="reply.reply_to" class="reply-tag">回复 @{{ reply.reply_to }}</span>
                       <template v-for="(tk, i) in tokens(reply.body)" :key="i">
                         <span v-if="tk.mention" class="mention">{{ tk.text }}</span>
+                        <img
+                          v-else-if="tk.emoji && emojiSrc(tk.text)" class="emoji"
+                          :src="emojiSrc(tk.text)!" :alt="tk.text"
+                        />
                         <template v-else>{{ tk.text }}</template>
                       </template>
                     </p>
@@ -339,18 +400,21 @@ function isMine(item: { user_id: number; id: number }): boolean {
           />
           <!-- @ 提及与表情：入口先就位，功能下一轮再做，因此保持禁用并标注「即将上线」，
                避免点了没反应被当成坏了。 -->
-          <button
-            type="button" class="pick" disabled
-            title="@ 提及即将上线" aria-label="@ 提及（即将上线）"
-          >
-            <ImIcon name="at" :size="21" />
-          </button>
-          <button
-            type="button" class="pick" disabled
-            title="表情即将上线" aria-label="表情（即将上线）"
-          >
-            <ImIcon name="face" :size="22" />
-          </button>
+          <div ref="emojiAnchor" class="pickers">
+            <button
+              type="button" class="pick" disabled
+              title="@ 提及即将上线" aria-label="@ 提及（即将上线）"
+            >
+              <ImIcon name="at" :size="21" />
+            </button>
+            <button
+              type="button" class="pick" :class="{ on: emojiOpen }"
+              :aria-expanded="emojiOpen" aria-label="表情" title="表情" @click="toggleEmoji"
+            >
+              <ImIcon name="face" :size="22" />
+            </button>
+            <EmojiPanel v-if="emojiOpen" @pick="insertEmoji" />
+          </div>
           <button type="submit" :disabled="!draft.trim() || posting" aria-label="发送评论">
             <ImIcon name="share" :size="18" />
           </button>
@@ -514,7 +578,13 @@ function isMine(item: { user_id: number; id: number }): boolean {
   cursor: pointer;
 }
 .composer button[type="submit"]:disabled { opacity: 0.45; cursor: not-allowed; }
-/* 占位入口：可见但不可点，视觉上比输入框弱一档。 */
+/* 表情面板以这里为定位锚点（面板向右对齐、浮在输入区上方）。 */
+.composer .pickers {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
 .composer .pick {
   display: grid;
   place-items: center;
@@ -523,9 +593,25 @@ function isMine(item: { user_id: number; id: number }): boolean {
   height: 42px;
   padding: 0;
   border: 0;
+  border-radius: 8px;
   background: none;
   color: var(--vp-im-text-secondary);
-  cursor: not-allowed;
-  opacity: 0.72;
+  cursor: pointer;
+}
+.composer .pick:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--vp-im-text-primary);
+}
+.composer .pick.on { color: var(--vp-im-accent); }
+/* @ 提及仍是占位：可见但不可点，视觉上比输入框弱一档。 */
+.composer .pick:disabled { cursor: not-allowed; opacity: 0.72; }
+/* 评论里的表情图：与正文同高、基线对齐，不撑高行高。 */
+.comment .emoji,
+.comment .body .emoji {
+  width: 18px;
+  height: 18px;
+  margin: 0 1px;
+  vertical-align: -4px;
+  display: inline-block;
 }
 </style>
