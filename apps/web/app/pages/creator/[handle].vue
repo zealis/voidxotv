@@ -93,9 +93,9 @@ if (error.value || !profile.value) {
 const site = useSiteOrigin()
 useSeoMeta({
   title: () => `${profile.value?.display_name || '用户' + nightId.value} · 夜街`,
-  description: () => `夜街号 ${nightId.value} 的公开作品，共 ${profile.value?.content_count || 0} 条。`,
+  description: () => `夜街号：${nightId.value} 的公开作品，共 ${profile.value?.content_count || 0} 条。`,
   ogTitle: () => `${profile.value?.display_name || '用户' + nightId.value} · 夜街`,
-  ogDescription: () => `夜街号 ${nightId.value} 的公开作品`,
+  ogDescription: () => `夜街号：${nightId.value} 的公开作品`,
   ogImage: () => profile.value?.avatar_url || '',
   robots: 'index,follow',
 })
@@ -113,7 +113,7 @@ useHead({
       </div>
       <div class="identity">
         <h1>{{ profile?.display_name || `用户${handle}` }}</h1>
-        <p class="handle">夜街号 {{ nightId }}</p>
+        <p class="handle">夜街号：{{ nightId }}</p>
         <p v-if="profile?.bio" class="bio">{{ profile.bio }}</p>
         <p class="stats">
           <span>{{ profile?.content_count || 0 }} 作品</span>

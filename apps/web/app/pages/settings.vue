@@ -416,7 +416,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="row">
           <div class="label"><strong>账号</strong></div>
-          <span class="value">夜街号 {{ profile?.handle }}</span>
+          <span class="value">夜街号：{{ profile?.handle }}</span>
         </div>
         <div class="row">
           <div class="label">

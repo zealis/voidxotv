@@ -506,7 +506,7 @@ async function signOut() {
         <template v-if="me">
           <span class="avatar">{{ me.handle.slice(0, 1).toUpperCase() }}</span>
           <div class="rail-user-text">
-            <strong>夜街号 {{ me.handle }}</strong>
+            <strong>夜街号：{{ me.handle }}</strong>
             <NuxtLink to="/studio">创作中心</NuxtLink>
           </div>
           <button type="button" class="sign-out" @click="signOut">退出</button>

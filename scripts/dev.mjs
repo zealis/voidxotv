@@ -109,6 +109,19 @@ async function healthy(name) {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// process.kill(pid, 0) 只探活，不发信号；Windows 上同样可用。
+function pidAlive(pid) {
+  if (!pid) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function readPid(name) {
   if (!existsSync(pidFile(name))) return null
   const pid = Number(readFileSync(pidFile(name), 'utf8').trim())
@@ -171,6 +184,10 @@ async function stop(name) {
     killImage(name)
     console.log(`  已停止 ${name}（按进程名兜底）`)
   }
+  // taskkill 返回不代表句柄已释放：紧接着 spawn 同一个 exe 会 EPERM。
+  // 等进程真正消失再返回（最长 3s），超时也继续——start 还有重试兜底。
+  const gone = services[name]?.kind === 'go' ? () => !processRunning(name) : () => !pidAlive(pid)
+  for (let i = 0; i < 30 && !gone(); i += 1) await sleep(100)
 }
 
 // 编译失败不能把守护进程带崩：返回布尔值，调用方决定是沿用上一版二进制还是跳过。
@@ -187,6 +204,18 @@ function build(name) {
   return false
 }
 
+// spawn() 的失败是异步 emit('error')，不是同步 throw；用事件判断真正拉起。
+function spawnService(spec, fd) {
+  const child =
+    spec.kind === 'go'
+      ? spawn(spec.bin, [], { cwd: root, env, detached: true, stdio: ['ignore', fd, fd] })
+      : spawn(spec.command, spec.args, { cwd: spec.cwd, env, detached: true, stdio: ['ignore', fd, fd] })
+  return new Promise((resolve, reject) => {
+    child.once('spawn', () => resolve(child))
+    child.once('error', reject)
+  })
+}
+
 async function start(name, options = {}) {
   const spec = services[name]
   if (spec.kind === 'go' && !options.built) {
@@ -199,11 +228,21 @@ async function start(name, options = {}) {
   // spawn 的 stdio 只接受已打开的文件描述符，WriteStream 在 open 之前 fd 为 null。
   const fd = openSync(logFile(name), 'a')
   appendFileSync(logFile(name), `\n=== ${new Date().toISOString()} 启动 ${name} ===\n`)
-  const child =
-    spec.kind === 'go'
-      ? spawn(spec.bin, [], { cwd: root, env, detached: true, stdio: ['ignore', fd, fd] })
-      : spawn(spec.command, spec.args, { cwd: spec.cwd, env, detached: true, stdio: ['ignore', fd, fd] })
+  let child = null
+  let lastError = null
+  // 偶发 EPERM（旧进程的 exe 句柄还没释放）时重试，别把服务留在「已停止」状态。
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      child = await spawnService(spec, fd)
+      break
+    } catch (error) {
+      lastError = error
+      if (error.code !== 'EPERM' || attempt === 3) break
+      await sleep(400 * attempt)
+    }
+  }
   closeSync(fd)
+  if (!child) throw lastError
   child.unref()
   writeFileSync(pidFile(name), String(child.pid), 'utf8')
   console.log(`  已启动 ${name}（pid ${child.pid}，日志 data/logs/${name}.log）`)
@@ -323,13 +362,18 @@ function watchSources() {
       console.log(`\n检测到改动：${names.join(' / ')}，重建重启`)
       try {
         for (const name of names) {
-          // 先编译再停旧进程：源码编译不过时保持现有服务继续跑，不制造空窗。
-          if (services[name].kind === 'go' && !build(name)) {
-            console.error(`  ↳ ${name} 保持原进程不动；修好后保存会自动再试`)
-            continue
+          try {
+            // 先编译再停旧进程：源码编译不过时保持现有服务继续跑，不制造空窗。
+            if (services[name].kind === 'go' && !build(name)) {
+              console.error(`  ↳ ${name} 保持原进程不动；修好后保存会自动再试`)
+              continue
+            }
+            await stop(name)
+            await start(name, { built: true })
+          } catch (error) {
+            // 一个服务重启失败不该连累另一个，也不该结束监听。
+            console.error(`  ↳ ${name} 重启失败：${error.message}（监听继续，保存后会再试）`)
           }
-          await stop(name)
-          await start(name, { built: true })
         }
         await status()
       } catch (error) {
