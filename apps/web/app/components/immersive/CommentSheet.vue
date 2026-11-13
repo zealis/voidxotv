@@ -337,6 +337,20 @@ function isMine(item: { user_id: number; id: number }): boolean {
             :placeholder="replyTo ? `回复 @${replyTo.handle}…` : '说点什么…'"
             aria-label="评论内容"
           />
+          <!-- @ 提及与表情：入口先就位，功能下一轮再做，因此保持禁用并标注「即将上线」，
+               避免点了没反应被当成坏了。 -->
+          <button
+            type="button" class="pick" disabled
+            title="@ 提及即将上线" aria-label="@ 提及（即将上线）"
+          >
+            <ImIcon name="at" :size="21" />
+          </button>
+          <button
+            type="button" class="pick" disabled
+            title="表情即将上线" aria-label="表情（即将上线）"
+          >
+            <ImIcon name="face" :size="22" />
+          </button>
           <button type="submit" :disabled="!draft.trim() || posting" aria-label="发送评论">
             <ImIcon name="share" :size="18" />
           </button>
@@ -500,4 +514,18 @@ function isMine(item: { user_id: number; id: number }): boolean {
   cursor: pointer;
 }
 .composer button[type="submit"]:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 占位入口：可见但不可点，视觉上比输入框弱一档。 */
+.composer .pick {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--vp-im-text-secondary);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
 </style>
