@@ -16,6 +16,13 @@ interface CreatorProfile {
 const route = useRoute()
 const handle = computed(() => String(route.params.handle || ''))
 
+// 夜街号补零到 6 位：/creator/34 与 /creator/000034 是同一个人。
+// 页面显示与「是否本人」判断都用补零后的值，避免旧链接把号显示成 34。
+function padNightId(value: string): string {
+  const trimmed = value.trim()
+  if (!/^\d+$/.test(trimmed) || trimmed.length >= 6) return trimmed
+  return trimmed.padStart(6, '0')
+}
 const { data, error } = await useAsyncData(
   () => `creator-${handle.value}`,
   () => $fetch<{ data: { profile: CreatorProfile; items: FeedItem[]; count: number } }>(
@@ -25,6 +32,8 @@ const { data, error } = await useAsyncData(
 )
 
 const profile = computed(() => data.value?.data.profile || null)
+// 补零后的夜街号：优先用接口返回的 handle，URL 里是 34 时也能显示成 000034。
+const nightId = computed(() => profile.value?.handle || padNightId(handle.value))
 const items = computed(() => data.value?.data.items || [])
 
 // 关注状态是「当前访客」的视角，不能进 SSR 结果（创作者页会被 Delivery 预渲染并公共缓存），
@@ -44,7 +53,7 @@ onMounted(async () => {
   followerCount.value = profile.value?.follower_count || 0
   const me = await getMe()
   if (!me) return
-  if (me.handle === handle.value) {
+  if (me.handle === nightId.value) {
     isSelf.value = true
     return
   }
@@ -83,10 +92,10 @@ if (error.value || !profile.value) {
 // canonical 按请求头推导公开 origin（代理/CDN 后仍正确）。
 const site = useSiteOrigin()
 useSeoMeta({
-  title: () => `${profile.value?.display_name || '用户' + handle.value} · 夜街`,
-  description: () => `夜街号 ${handle.value} 的公开作品，共 ${profile.value?.content_count || 0} 条。`,
-  ogTitle: () => `${profile.value?.display_name || '用户' + handle.value} · 夜街`,
-  ogDescription: () => `夜街号 ${handle.value} 的公开作品`,
+  title: () => `${profile.value?.display_name || '用户' + nightId.value} · 夜街`,
+  description: () => `夜街号 ${nightId.value} 的公开作品，共 ${profile.value?.content_count || 0} 条。`,
+  ogTitle: () => `${profile.value?.display_name || '用户' + nightId.value} · 夜街`,
+  ogDescription: () => `夜街号 ${nightId.value} 的公开作品`,
   ogImage: () => profile.value?.avatar_url || '',
   robots: 'index,follow',
 })
@@ -104,7 +113,7 @@ useHead({
       </div>
       <div class="identity">
         <h1>{{ profile?.display_name || `用户${handle}` }}</h1>
-        <p class="handle">夜街号 {{ handle }}</p>
+        <p class="handle">夜街号 {{ nightId }}</p>
         <p v-if="profile?.bio" class="bio">{{ profile.bio }}</p>
         <p class="stats">
           <span>{{ profile?.content_count || 0 }} 作品</span>

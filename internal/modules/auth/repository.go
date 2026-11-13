@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/yejie/voidxotv/internal/platform/nightid"
 )
 
 var (
@@ -31,7 +33,8 @@ func (r *Repository) CreateUser(ctx context.Context, email, passwordHash string)
 		WITH new_id AS (SELECT nextval('users_id_seq') AS id)
 		INSERT INTO users (id, handle, email, password_hash, display_name)
 		OVERRIDING SYSTEM VALUE
-		SELECT id, id::text, $1, $2, '用户' || id FROM new_id
+		SELECT id, lpad(id::text, 6, '0'), $1, $2, '用户' || lpad(id::text, 6, '0')
+		FROM new_id
 		RETURNING id, handle, COALESCE(email, ''), password_hash, role, status, created_at`
 	var user User
 	err := r.db.QueryRow(ctx, query, email, passwordHash).Scan(
@@ -46,15 +49,19 @@ func (r *Repository) CreateUser(ctx context.Context, email, passwordHash string)
 	return user, nil
 }
 
-// FindByAccount 按邮箱找账号；邮箱不匹配时回落到 handle（纯数字夜街号），
-// 兼容后台脚本、curl 与旧客户端。已登录用户的 email 为 NULL 时只可能走 handle。
+// FindByAccount 按邮箱找账号；邮箱不匹配时回落到 handle（夜街号），
+// 兼容后台脚本、curl 与旧客户端。夜街号同时接受 "34" 与 "000034"。
 func (r *Repository) FindByAccount(ctx context.Context, account string) (User, error) {
+	handles := []string{account}
+	if padded := nightid.Normalize(account); padded != account {
+		handles = append(handles, padded)
+	}
 	const query = `
 		SELECT id, handle, COALESCE(email, ''), password_hash, role, status, created_at
-		FROM users WHERE email = $1 OR handle = $1
+		FROM users WHERE email = $1 OR handle = ANY($2)
 		ORDER BY (email = $1) DESC
 		LIMIT 1`
-	return r.scanUser(r.db.QueryRow(ctx, query, account))
+	return r.scanUser(r.db.QueryRow(ctx, query, account, handles))
 }
 
 func (r *Repository) FindByHandle(ctx context.Context, handle string) (User, error) {

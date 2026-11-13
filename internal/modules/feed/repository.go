@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yejie/voidxotv/internal/modules/content"
+	"github.com/yejie/voidxotv/internal/platform/nightid"
 )
 
 type Repository struct {
@@ -79,6 +81,7 @@ func (r *Repository) Avatars(ctx context.Context, userIDs []int64) (map[int64]st
 // ListByHandle backs the public creator page; visibility rules are identical to
 // the home feed so a creator page can never expose non-public content.
 func (r *Repository) ListByHandle(ctx context.Context, handle string, cursor int64, limit int) ([]row, error) {
+	handle = nightid.Normalize(handle)
 	rows, err := r.db.Query(ctx, `
 		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle, u.display_name,
 		       COALESCE(c.published_at, 'epoch'::timestamptz), COALESCE(c.duration_ms, 0)
@@ -168,7 +171,7 @@ func (r *Repository) Creator(ctx context.Context, handle string) (CreatorProfile
 		          AND c.visibility = 'public'),
 		       (SELECT count(*) FROM follows f WHERE f.follower_id = u.id),
 		       (SELECT count(*) FROM follows f WHERE f.followee_id = u.id)
-		FROM users u WHERE u.handle = $1 AND u.status = 'active'`, handle).Scan(
+		FROM users u WHERE u.handle = $1 AND u.status = 'active'`, nightid.Normalize(handle)).Scan(
 		&profile.Handle, &profile.DisplayName, &profile.Bio, &avatar,
 		&profile.ContentCount, &profile.LikeCount, &profile.FollowingCount, &profile.FollowerCount)
 	if err != nil {
@@ -418,7 +421,8 @@ func (r *Repository) DB() *pgxpool.Pool { return r.db }
 func (r *Repository) FollowTargetID(ctx context.Context, handle string) (int64, error) {
 	var id int64
 	if err := r.db.QueryRow(ctx,
-		`SELECT id FROM users WHERE handle = $1 AND status = 'active'`, handle).Scan(&id); err != nil {
+		`SELECT id FROM users WHERE handle = $1 AND status = 'active'`,
+		nightid.Normalize(handle)).Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil

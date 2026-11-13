@@ -25,6 +25,7 @@ import (
 	"github.com/yejie/voidxotv/internal/modules/notifications"
 	"github.com/yejie/voidxotv/internal/modules/stats"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
+	"github.com/yejie/voidxotv/internal/platform/nightid"
 	"github.com/yejie/voidxotv/internal/platform/objectstore"
 )
 
@@ -496,6 +497,10 @@ func (h *Handler) notifyMentions(ctx context.Context, contentID int64,
 	handles := mentionedHandles(body)
 	if len(handles) == 0 {
 		return
+	}
+	// 评论里 @34 与 @000034 指向同一个人：统一补零后再查。
+	for i, handle := range handles {
+		handles[i] = nightid.Normalize(handle)
 	}
 	rows, err := h.db.Query(ctx, `
 		SELECT id FROM users
