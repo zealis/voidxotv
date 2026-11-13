@@ -3,11 +3,15 @@
 // 单例 <video> 在切条时被移动到当前条目的媒体槽；只渲染当前及前后各一条。
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { FeedItem } from '~/composables/useFeed'
+import type { MediaWindow } from '~/composables/useImmersivePlayer'
 import { ApiError, errorMessage } from '~/composables/useApi'
 
 const { list, detail, following, follow, avatar, tags, caption, formatCount } = useFeed()
 const { state, applyServer, setFollowing, toggleLike, toggleFavorite } = useInteractions()
-const player = useImmersivePlayer()
+// 列表只带签名摘要，预载窗口内的 HLS 条目要补一次详情才能拿到 master playlist。
+const player = useImmersivePlayer({
+  resolveMedia: async (item) => (await detail(item.slug)).media,
+})
 // 观看进度上报（§9.1）：当前条目播放中每 10 秒补报，隐藏/离开立即补报。
 const reporter = useProgressReporter(player, () => (currentItem.value ? { id: currentItem.value.id, type: currentItem.value.type } : null))
 const { preferences, load: loadPreferences } = usePreferences()
@@ -129,14 +133,32 @@ async function onFavorite(item: FeedItem) {
   }
 }
 
+// 预加载 / 保留窗口（§8.2）：用户定案「向下 3 / 向上 5」。
+// 这是内存与流量的直接成本，所以按网络状况自动收缩：省流或 2G 只留上一条，
+// 3G 折半，其余按满窗口。CSS 断点无关——移动端同样遵守，只是窗口更保守。
+function mediaWindow(): MediaWindow {
+  const conn = (navigator as Navigator & {
+    connection?: { saveData?: boolean; effectiveType?: string }
+  }).connection
+  if (conn?.saveData) return { forward: 0, backward: 1 }
+  const type = conn?.effectiveType || ''
+  if (type.includes('2g')) return { forward: 0, backward: 1 }
+  if (type.includes('3g')) return { forward: 1, backward: 2 }
+  return { forward: 3, backward: 5 }
+}
+
 function preloadNeighbours() {
   if (!import.meta.client) return
-  for (const index of [current.value - 1, current.value + 1]) {
-    const url = items.value[index]?.media.poster_url
-    if (url) {
-      const image = new Image()
-      image.src = url
-    }
+  const { forward, backward } = mediaWindow()
+  // 封面只服务渲染窗口（±1），多备一张防快速连滑；按视频窗口铺开纯属白下载。
+  const ahead = Math.min(forward, 2)
+  const behind = Math.min(backward, 2)
+  for (let i = current.value - behind; i <= current.value + ahead; i += 1) {
+    if (i === current.value) continue
+    const url = items.value[i]?.media.poster_url
+    if (!url) continue
+    const image = new Image()
+    image.src = url
   }
 }
 
@@ -168,6 +190,8 @@ async function activateCurrent() {
   const slot = root?.querySelector<HTMLElement>(`[data-feed-index="${current.value}"] .media-slot`)
   player.attach(slot || null)
   await player.load(active)
+  // 当前条目已就位，再铺开预载窗口：先播当前，后台慢速补周边。
+  player.prepare(items.value, current.value, mediaWindow())
   preloadNeighbours()
 }
 
