@@ -82,6 +82,20 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
         <img :src="emojiSrc(item) || ''" :alt="item" loading="lazy" />
       </button>
     </div>
+    <!-- 底部类型选择器：当前只有「表情」可用，GIF 先占位（与 @ 提及入口同一套处理）。 -->
+    <div class="emoji-foot">
+      <button
+        type="button" class="kind on" :aria-pressed="true" aria-label="表情" title="表情"
+      >
+        <ImIcon name="face" :size="26" />
+      </button>
+      <button
+        type="button" class="kind gif" disabled
+        title="GIF 即将上线" aria-label="GIF（即将上线）"
+      >
+        GIF
+      </button>
+    </div>
   </div>
 </template>
 
@@ -92,9 +106,10 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
   bottom: calc(100% + 8px);
   z-index: var(--vp-im-z-controls);
   display: grid;
-  grid-template-rows: auto 1fr;
+  /* 分类条 / 表情栅格 / 底部类型选择器 */
+  grid-template-rows: auto 1fr auto;
   width: min(340px, calc(100vw - 40px));
-  max-height: 264px;
+  max-height: 300px;
   border-radius: 14px;
   border: 1px solid var(--vp-im-glass-border);
   background: rgba(18, 18, 32, 0.96);
@@ -147,6 +162,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
   grid-template-columns: repeat(8, 1fr);
   gap: 2px;
   padding: 8px;
+  /* 网格轨在 flex/grid 里默认不能小于内容，加 min-height:0 才能被 footer 挤压后滚动。 */
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -164,9 +181,45 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
 .emoji-cell:hover { background: rgba(255, 255, 255, 0.1); }
 .emoji-cell img { width: 26px; height: 26px; display: block; }
 
-/* 窄屏：不再是一张挂在表情按钮左边的 340px 卡片（会向左溢出屏幕、右侧留一大块空），
-   而是横向铺满整条输入区，左右与输入框对齐。锚点由 CommentSheet 的
-   `.composer .pickers { position: static }` 切到 .composer 上。 */
+/* 底部类型选择器：左边「表情」是当前分类（品牌色），右边「GIF」先占位。
+   GIF 功能未实现，所以做成 disabled + 「即将上线」，不做成点了没反应的按钮。 */
+.emoji-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 12px 9px;
+  border-top: 1px solid var(--vp-im-glass-border);
+}
+.kind {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--vp-im-text-secondary);
+  cursor: pointer;
+}
+.kind.on {
+  color: var(--vp-im-accent);
+  cursor: default;
+}
+/* GIF 徽标：描边圆 + 三个字母，外框尺寸与左边的圆脸图标一致。 */
+.kind.gif {
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.kind.gif:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* 窄屏：不再是一张挂在表情按钮左边的 340px 卡片（会向左溢出屏幕、右侧留一大块空），
    而是横向铺满整屏、像键盘一样贴着两条边——这样 8 个分类也刚好不需要横向滚动。
    锚点由 CommentSheet 的 `.composer .pickers { position: static }` 切到 .composer 上。 */
