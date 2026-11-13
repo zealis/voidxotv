@@ -57,16 +57,50 @@ const currentItem = computed<FeedItem | null>(() => items.value[current.value] |
 // 底栏收起状态：视频跟随播放（播放收起、暂停恢复）；图片没有播放语义，
 // 默认收起保持沉浸，点画面可唤出（唤出后再点收起）。移动端由 CSS 断点忽略该状态。
 const imageNavPinned = ref(false)
-const chromeCollapsed = computed(() => {
-  if (!currentItem.value) return false
-  if (currentItem.value.type === 'image') return !imageNavPinned.value
+// 切条瞬间旧视频会先 pause（playing=false），新视频加载完再 play（true）。
+// 如果不锁住，底栏会在滑动时弹出来再收回去，所以切换期间强制收起，
+// 等新内容 ready / failed（或 3s 兜底）后交还给真实播放状态。
+const switching = ref(false)
+let switchTimer: ReturnType<typeof setTimeout> | null = null
+const chromeCollapsed = ref(true)
+let chromeTimer: ReturnType<typeof setTimeout> | null = null
+
+const rawCollapsed = computed(() => {
+  const item = currentItem.value
+  if (!item) return chromeCollapsed.value
+  if (item.type === 'image') return !imageNavPinned.value
+  if (switching.value || !player.state.ready) return true
   return player.state.playing
 })
+
 function toggleImageChrome() {
   if (currentItem.value?.type === 'image') imageNavPinned.value = !imageNavPinned.value
 }
-// 切到另一条内容时，图片回到默认收起，不复用上一条的唤出状态。
-watch(current, () => { imageNavPinned.value = false })
+
+// 收起立即生效（别让底栏在滑动手势里露一下）；展开延迟 120ms 吸收播放器的瞬时抖动。
+watch(rawCollapsed, (next) => {
+  if (chromeTimer) clearTimeout(chromeTimer)
+  if (next) {
+    chromeCollapsed.value = true
+    return
+  }
+  chromeTimer = setTimeout(() => { chromeCollapsed.value = false }, 120)
+})
+
+// 切到另一条内容：图片回到默认收起，进入切换窗口。
+watch(current, () => {
+  imageNavPinned.value = false
+  switching.value = true
+  if (switchTimer) clearTimeout(switchTimer)
+  switchTimer = setTimeout(() => { switching.value = false }, 3000)
+}, { flush: 'sync' })
+
+// 新条目转码就绪或失败即结束切换窗口；失败时也要让用户能唤出底栏。
+watch([() => player.state.ready, () => player.state.failed], ([ready, failed]) => {
+  if (!ready && !failed) return
+  switching.value = false
+  if (switchTimer) clearTimeout(switchTimer)
+})
 
 // 点赞 / 收藏落库（§6.2）：接口成功才更新乐观状态与角标；未登录是预期场景，给引导不报错。
 async function onLike(item: FeedItem) {

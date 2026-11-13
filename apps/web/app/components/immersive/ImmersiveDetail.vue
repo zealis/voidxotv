@@ -31,17 +31,7 @@ const { data, error } = await useAsyncData(`feed-detail-${props.slug}`, () =>
 
 const item = computed<FeedItem | null>(() => data.value?.data || null)
 
-// 底栏收起状态：视频跟随播放；图片默认收起，点画面唤出。移动端由 CSS 断点忽略。
-const imageNavPinned = ref(false)
-const chromeCollapsed = computed(() => {
-  if (!item.value) return false
-  if (item.value.type === 'image') return !imageNavPinned.value
-  return player.state.playing
-})
-function toggleImageChrome() {
-  if (item.value?.type === 'image') imageNavPinned.value = !imageNavPinned.value
-}
-watch(() => item.value?.id, () => { imageNavPinned.value = false })
+
 const deepLink = computed(() => item.value
   ? (item.value.type === 'image' ? `/image/${item.value.slug}` : `/video/${item.value.slug}`)
   : '')
@@ -116,6 +106,30 @@ const player = useImmersivePlayer()
 if (item.value) applyServer(item.value.slug, !!item.value.liked, !!item.value.favorited)
 // 观看进度（§9.1）：播放中定期上报，隐藏/离开补报；进入详情时取最近位置续播。
 const reporter = useProgressReporter(player, () => (item.value ? { id: item.value.id, type: item.value.type } : null))
+
+// 底栏收起状态：视频跟随播放；图片默认收起，点画面唤出。移动端由 CSS 断点忽略。
+// 加载期（ready=false、playing 尚未起来）一律先收起，避免底栏出现再消失地闪一下。
+const imageNavPinned = ref(false)
+const chromeCollapsed = ref(true)
+let chromeTimer: ReturnType<typeof setTimeout> | null = null
+const rawCollapsed = computed(() => {
+  if (!item.value) return chromeCollapsed.value
+  if (item.value.type === 'image') return !imageNavPinned.value
+  if (!player.state.ready) return true
+  return player.state.playing
+})
+watch(rawCollapsed, (next) => {
+  if (chromeTimer) clearTimeout(chromeTimer)
+  if (next) {
+    chromeCollapsed.value = true
+    return
+  }
+  chromeTimer = setTimeout(() => { chromeCollapsed.value = false }, 120)
+})
+function toggleImageChrome() {
+  if (item.value?.type === 'image') imageNavPinned.value = !imageNavPinned.value
+}
+watch(() => item.value?.id, () => { imageNavPinned.value = false })
 let resumed = false
 const watchlisted = ref(false)
 watch(() => item.value?.id, () => { resumed = false; void loadWatchlist() })
