@@ -8,6 +8,7 @@
 //   node scripts/dev.mjs restart api   重建并重启指定服务（api / worker / web / all）
 //   node scripts/dev.mjs stop all      停止指定服务
 //   node scripts/dev.mjs watch         只开源码监听（服务已在跑时用）
+//   node scripts/dev.mjs reset-limits  清空登录限流计数（手测输错密码把自己锁了时用）
 //
 // 环境变量默认值与 scripts/dev.sh 保持一致；需要覆盖时在调用前 export。
 
@@ -93,6 +94,11 @@ const services = {
 
 const pidFile = (name) => join(pidDir, `${name}.pid`)
 const logFile = (name) => join(logDir, `${name}.log`)
+
+function shOut(command, args) {
+  const result = spawnSync(command, args, { cwd: root, env, encoding: 'utf8', shell: isWin })
+  return (result.stdout || '').trim()
+}
 
 function sh(command, args) {
   const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit', shell: isWin })
@@ -396,6 +402,27 @@ function watchSources() {
   }
 }
 
+// 登录限流落在 Redis 的计数键上（后台 admin_login_fail:<ip> 10 次 / 15 分钟，
+// 前台 yejie:ratelimit:login:<ip>）。手测时故意输错密码很容易把自己锁一段时间，
+// 这里给一条一键清空的口子，不用记 redis-cli 的命令。
+async function resetLimits() {
+  const patterns = ['admin_login_fail:*', 'yejie:ratelimit:login:*']
+  let removed = 0
+  for (const pattern of patterns) {
+    const keys = shOut('docker', ['compose', 'exec', '-T', 'redis', 'redis-cli',
+      '--scan', '--pattern', pattern])
+      .split(/\r?\n/)
+      .map((key) => key.trim())
+      .filter(Boolean)
+    for (const key of keys) {
+      shOut('docker', ['compose', 'exec', '-T', 'redis', 'redis-cli', 'del', key])
+      removed++
+    }
+    console.log(`${pattern} → ${keys.length} 个`)
+  }
+  console.log(removed > 0 ? `已清除 ${removed} 个限流键` : '没有需要清除的限流键')
+}
+
 const [command = 'status', ...rest] = process.argv.slice(2)
 const detach = rest.includes('--detach')
 const withWatch = rest.includes('--watch')
@@ -419,7 +446,10 @@ switch (command) {
   case 'watch':
     watchSources()
     break
+  case 'reset-limits':
+    await resetLimits()
+    break
   default:
-    console.error('用法：node scripts/dev.mjs <up|status|restart|stop|watch> [api|worker|web|all]')
+    console.error('用法：node scripts/dev.mjs <up|status|restart|stop|watch|reset-limits> [api|worker|web|all]')
     process.exit(1)
 }

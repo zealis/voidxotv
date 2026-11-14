@@ -38,6 +38,7 @@ node scripts/dev.mjs up --detach   # 只启动不守护，适合 CI
 node scripts/dev.mjs status        # 健康检查 + API 版本
 node scripts/dev.mjs restart api   # 改完后端：重建并重启（api / worker / web / all）
 node scripts/dev.mjs stop all      # 停止
+node scripts/dev.mjs reset-limits  # 清空登录限流计数（手测输错密码把自己锁了时用）
 ```
 
 - API：`http://127.0.0.1:18080`（`/health/ready`）
