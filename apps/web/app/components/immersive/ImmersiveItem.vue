@@ -507,6 +507,7 @@ function onSeek(event: MouseEvent) {
       v-if="props.active && !props.clearUi"
       :author="props.item.author.display_name || `用户${props.item.author.handle}`" :caption="props.caption"
       :tags="props.tags" :expanded="props.expanded" :poi="props.item.poi"
+      :published-at="props.item.published_at"
       :danmaku="props.item.type === 'video'"
       @toggle-expand="emit('expand')"
       @danmaku="openMobileDanmaku"

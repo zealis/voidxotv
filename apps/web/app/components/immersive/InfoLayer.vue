@@ -10,8 +10,12 @@ const props = defineProps<{
   poi?: { name: string; address?: string } | null
   /** 图片没有弹幕，「弹」入口只在视频里出现。 */
   danmaku?: boolean
+  /** 发布时间（ISO 串）：作者名右侧显示「· 3天前 / 11月8日」。 */
+  publishedAt?: string
 }>()
 const emit = defineEmits<{ 'toggle-expand': []; danmaku: [] }>()
+
+const timeLabel = computed(() => publishedLabel(props.publishedAt))
 </script>
 
 <template>
@@ -21,7 +25,13 @@ const emit = defineEmits<{ 'toggle-expand': []; danmaku: [] }>()
       v-if="props.danmaku !== false" type="button" class="danmaku-entry"
       aria-label="发弹幕" @click="emit('danmaku')"
     >弹</button>
-    <div class="author">{{ props.author }}</div>
+    <div class="author">
+      <span class="name">{{ props.author }}</span>
+      <template v-if="timeLabel">
+        <span class="sep" aria-hidden="true">·</span>
+        <time class="time" :datetime="props.publishedAt">{{ timeLabel }}</time>
+      </template>
+    </div>
     <p class="caption" :class="{ expanded: props.expanded }">{{ props.caption || '暂无文案' }}</p>
     <button v-if="props.caption.length > 42" type="button" class="expand" @click="emit('toggle-expand')">
       {{ props.expanded ? '收起' : '展开' }}
@@ -70,7 +80,18 @@ const emit = defineEmits<{ 'toggle-expand': []; danmaku: [] }>()
   /* 移动端没有控制条，信息层回到底栏上方，不空出一整条。 */
   .info { bottom: calc(74px + env(safe-area-inset-bottom)); }
 }
-.author { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.author {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+/* 时间比作者名弱一档：同一行里先看到人，再看到多久以前。 */
+.author .sep { color: rgba(255, 255, 255, 0.5); }
+.author .time { font-size: 14px; font-weight: 400; color: rgba(255, 255, 255, 0.75); }
 .caption {
   margin: 0;
   font-size: 14px;
