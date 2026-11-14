@@ -9,6 +9,7 @@ import (
 
 	"github.com/yejie/voidxotv/internal/modules/admin"
 	"github.com/yejie/voidxotv/internal/modules/auth"
+	"github.com/yejie/voidxotv/internal/modules/gifs"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 )
 
@@ -70,6 +71,11 @@ func (h *Handler) myComments(w http.ResponseWriter, r *http.Request) {
 			&item.ContentType, &item.Handle, &item.DisplayName, &item.Body, &item.CreatedAt); err != nil {
 			h.fail(w, r, err)
 			return
+		}
+		// 评论管理是纯文本列表，GIF 标记换成 [GIF]，别让运营看到一串 URL。
+		item.Body = gifs.StripMarkers(item.Body)
+		if item.Body == "" {
+			item.Body = "[GIF]"
 		}
 		items = append(items, item)
 	}

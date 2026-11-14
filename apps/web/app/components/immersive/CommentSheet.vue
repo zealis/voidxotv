@@ -49,6 +49,8 @@ const loading = ref(false)
 const posting = ref(false)
 const draft = ref('')
 const sentDraft = ref('')
+// 待发送的 GIF：选图后先挂在输入框上方预览，发送时和文字一起提交（正文里存 [[gif:url]]）。
+const pendingGif = ref('')
 const postFailed = ref(false)
 const notice = ref('')
 const replyTo = ref<{ id: number; name: string } | null>(null)
@@ -74,6 +76,7 @@ watch(() => props.contentId, () => {
   total.value = props.count
   Object.keys(threads).forEach((key) => delete threads[Number(key)])
   replyTo.value = null
+  pendingGif.value = ''
   postFailed.value = false
   notice.value = ''
 })
@@ -147,6 +150,14 @@ function authorName(item: { handle: string; display_name?: string }): string {
 }
 
 // 回复标识用昵称而不是 handle：handle 现在是 6 位夜街号，展示出来像一串 ID。
+// 从 GIF 页选了一张图：挂进待发送位并收起面板，等用户点发送。
+function onPickGif(url: string) {
+  if (!url) return
+  pendingGif.value = url
+  emojiOpen.value = false
+  input.value?.focus()
+}
+
 function startReply(target: { id: number; handle: string; display_name?: string }) {
   replyTo.value = { id: target.id, name: authorName(target) }
   input.value?.focus()
@@ -158,7 +169,9 @@ function cancelReply() {
 
 async function submit() {
   const text = draft.value.trim()
-  if (!text || posting.value) return
+  const gif = pendingGif.value
+  if ((!text && !gif) || posting.value) return
+  const body = [text, gif ? gifMarker(gif) : ''].filter(Boolean).join(' ')
   const parent = replyTo.value
   const now = Date.now()
 
@@ -168,13 +181,13 @@ async function submit() {
     const thread = ensureThread(parent.id)
     thread.open = true
     thread.items.push({
-      id: -now, body: text, handle: '', display_name: '我',
+      id: -now, body, handle: '', display_name: '我',
       created_at: new Date().toISOString(), user_id: me.value?.id ?? 0, pending: true,
     })
     if (!thread.loaded) await loadReplies(parent.id).catch(() => {})
   } else {
     items.value = [{
-      id: -now, body: text, handle: '', display_name: '我',
+      id: -now, body, handle: '', display_name: '我',
       created_at: new Date().toISOString(), user_id: me.value?.id ?? 0,
       reply_count: 0, pending: true,
     }, ...items.value]
@@ -186,7 +199,7 @@ async function submit() {
   try {
     const created = await api<CommentItem>(`/api/v1/contents/${props.contentId}/comments`, {
       method: 'POST',
-      body: { body: text, parent_id: parent?.id || undefined },
+      body: { body, parent_id: parent?.id || undefined },
     })
     if (parent) {
       const thread = ensureThread(parent.id)
@@ -198,6 +211,7 @@ async function submit() {
       if (index >= 0) items.value.splice(index, 1, created)
     }
     setTotal(total.value + 1)
+    pendingGif.value = ''
     replyTo.value = null
     postFailed.value = false
     notice.value = ''
@@ -253,8 +267,6 @@ async function remove(commentId: number) {
   }
 }
 
-const MENTION = /^@[a-zA-Z0-9_]{3,32}$/
-
 const emojiOpen = ref(false)
 const emojiAnchor = ref<HTMLElement | null>(null)
 
@@ -292,26 +304,41 @@ function onDocPointerDown(event: PointerEvent) {
 onMounted(() => document.addEventListener('pointerdown', onDocPointerDown))
 onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocPointerDown))
 
+type TokenKind = 'text' | 'mention' | 'emoji' | 'gif'
+
 interface Token {
   text: string
-  mention: boolean
-  emoji: boolean
+  kind: TokenKind
+}
+
+function gifMarker(url: string): string {
+  return `[[gif:${url}]]`
+}
+
+function pushText(result: Token[], text: string) {
+  // 普通片段再按表情切开：表情单独渲染成图片（public/emoji3d 下的 PNG），文字保持可选择。
+  for (const piece of splitEmoji(text)) {
+    result.push({ text: piece.value, kind: piece.type === 'emoji' ? 'emoji' : 'text' })
+  }
 }
 
 function tokens(body: string): Token[] {
   const result: Token[] = []
-  // split 带捕获组：奇数位是 @handle；纯文本不可能命中 mention 形态。
-  for (const part of body.split(/(@[a-zA-Z0-9_]{3,32})/g)) {
-    if (part === '') continue
-    if (MENTION.test(part)) {
-      result.push({ text: part, mention: true, emoji: false })
-      continue
+  // 一段正文里可能同时有 @提及 和 GIF 标记：先按这两类切，再对纯文本片段切表情。
+  const splitter = /(\[\[gif:https:\/\/[^\]\s]+\]\])|(@[a-zA-Z0-9_]{3,32})/g
+  let cursor = 0
+  for (const match of body.matchAll(splitter)) {
+    const index = match.index ?? 0
+    if (index > cursor) pushText(result, body.slice(cursor, index))
+    const raw = match[0]
+    if (raw.startsWith('[[gif:')) {
+      result.push({ text: raw.slice(6, -2), kind: 'gif' })
+    } else {
+      result.push({ text: raw, kind: 'mention' })
     }
-    // 普通片段再按表情切开：表情单独渲染成图片（public/emoji3d 下的 PNG），文字保持可选择。
-    for (const piece of splitEmoji(part)) {
-      result.push({ text: piece.value, mention: false, emoji: piece.type === 'emoji' })
-    }
+    cursor = index + raw.length
   }
+  if (cursor < body.length) pushText(result, body.slice(cursor))
   return result
 }
 
@@ -350,9 +377,13 @@ function isMine(item: { user_id: number; id: number }): boolean {
             <span class="name">{{ authorName(comment) }}</span>
             <p :class="{ pending: comment.pending }">
               <template v-for="(tk, i) in tokens(comment.body)" :key="i">
-                <span v-if="tk.mention" class="mention">{{ tk.text }}</span>
                 <img
-                  v-else-if="tk.emoji && emojiSrc(tk.text)" class="emoji"
+                  v-if="tk.kind === 'gif'" class="comment-gif"
+                  :src="tk.text" alt="GIF" loading="lazy"
+                >
+                <span v-else-if="tk.kind === 'mention'" class="mention">{{ tk.text }}</span>
+                <img
+                  v-else-if="tk.kind === 'emoji' && emojiSrc(tk.text)" class="emoji"
                   :src="emojiSrc(tk.text)!" :alt="tk.text"
                 />
                 <template v-else>{{ tk.text }}</template>
@@ -381,9 +412,13 @@ function isMine(item: { user_id: number; id: number }): boolean {
                     <p :class="{ pending: reply.pending }">
                       <span v-if="reply.reply_to" class="reply-tag">回复 @{{ reply.reply_to }}</span>
                       <template v-for="(tk, i) in tokens(reply.body)" :key="i">
-                        <span v-if="tk.mention" class="mention">{{ tk.text }}</span>
                         <img
-                          v-else-if="tk.emoji && emojiSrc(tk.text)" class="emoji"
+                          v-if="tk.kind === 'gif'" class="comment-gif"
+                          :src="tk.text" alt="GIF" loading="lazy"
+                        >
+                        <span v-else-if="tk.kind === 'mention'" class="mention">{{ tk.text }}</span>
+                        <img
+                          v-else-if="tk.kind === 'emoji' && emojiSrc(tk.text)" class="emoji"
                           :src="emojiSrc(tk.text)!" :alt="tk.text"
                         />
                         <template v-else>{{ tk.text }}</template>
@@ -418,6 +453,12 @@ function isMine(item: { user_id: number; id: number }): boolean {
           回复 @{{ replyTo.name }}
           <button type="button" aria-label="取消回复" @click="cancelReply"><ImIcon name="close" :size="12" /></button>
         </span>
+        <div v-if="pendingGif" class="gif-preview">
+          <img :src="pendingGif" alt="GIF 预览">
+          <button type="button" aria-label="移除 GIF" @click="pendingGif = ''">
+            <ImIcon name="close" :size="12" />
+          </button>
+        </div>
         <div class="row">
           <input
             ref="input" v-model="draft" type="text" maxlength="200"
@@ -439,9 +480,9 @@ function isMine(item: { user_id: number; id: number }): boolean {
             >
               <ImIcon name="face" :size="22" />
             </button>
-            <EmojiPanel v-if="emojiOpen" @pick="insertEmoji" />
+            <EmojiPanel v-if="emojiOpen" @pick="insertEmoji" @pick-gif="onPickGif" />
           </div>
-          <button type="submit" :disabled="!draft.trim() || posting" aria-label="发送评论">
+          <button type="submit" :disabled="(!draft.trim() && !pendingGif) || posting" aria-label="发送评论">
             <ImIcon name="share" :size="18" />
           </button>
         </div>
@@ -640,6 +681,46 @@ function isMine(item: { user_id: number; id: number }): boolean {
 .composer .pick.on { color: var(--vp-im-accent); }
 /* @ 提及仍是占位：可见但不可点，视觉上比输入框弱一档。 */
 .composer .pick:disabled { cursor: not-allowed; opacity: 0.72; }
+/* 评论里的 GIF：限宽限高，不撑破气泡；这是外链图，加载失败时留一块底色而不是塌成 0 高。 */
+.comment-gif {
+  display: block;
+  max-width: 168px;
+  max-height: 168px;
+  min-width: 80px;
+  min-height: 80px;
+  margin: 4px 0;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--vp-im-surface-raised);
+}
+/* 待发送的 GIF 预览：小图 + 移除按钮，与「回复 @」chip 同一层次。 */
+.gif-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 3px 8px 3px 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.gif-preview img {
+  width: 46px;
+  height: 46px;
+  border-radius: 9px;
+  object-fit: cover;
+  display: block;
+}
+.gif-preview button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--vp-im-text-primary);
+  cursor: pointer;
+}
 /* 评论里的表情图：略高于正文、基线对齐，不撑高行高（3D 图比线性图标需要更大尺寸）。 */
 .comment .emoji,
 .comment .body .emoji {

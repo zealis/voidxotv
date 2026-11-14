@@ -1,8 +1,11 @@
 <script setup lang="ts">
-// 评论表情面板：Google Noto 3D 表情，按分类分页。选中后由父组件插入输入框。
-// 图形全部是同源 PNG（public/emoji3d，由 scripts/sync-emoji3d.mjs 导出），
+// 评论表情面板：两个页签——「表情」（Google Noto 3D，按分类分页）与「GIF」（搜索图源）。
+// 表情图形是同源 PNG（public/emoji3d，由 scripts/sync-emoji3d.mjs 导出），
 // 尺寸固定 26px，避免不同表情视觉大小不一；3D 渲染比线性图标需要更大的显示尺寸。
-const emit = defineEmits<{ pick: [value: string] }>()
+const emit = defineEmits<{ pick: [value: string]; 'pick-gif': [url: string] }>()
+
+// emoji：分类 + 表情栅格；gif：搜索框 + 结果栅格（见 GifPanel）。
+const mode = ref<'emoji' | 'gif'>('emoji')
 
 const active = ref(emojiCategories[0]?.key || '')
 const current = computed(
@@ -56,8 +59,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
 </script>
 
 <template>
-  <div class="emoji-panel" role="dialog" aria-label="选择表情">
-    <div class="tabs-wrap">
+  <div class="emoji-panel" role="dialog" :aria-label="mode === 'gif' ? '选择 GIF' : '选择表情'">
+    <div v-if="mode === 'emoji'" class="tabs-wrap">
       <div
         ref="tabs" class="emoji-tabs" role="tablist" aria-label="表情分类"
         @wheel="onTabsWheel" @scroll.passive="syncEdges"
@@ -73,7 +76,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
       <span v-if="edges.left" class="tabs-edge left" aria-hidden="true" />
       <span v-if="edges.right" class="tabs-edge right" aria-hidden="true" />
     </div>
-    <div class="emoji-grid">
+    <div v-if="mode === 'emoji'" class="emoji-grid">
       <button
         v-for="item in current?.items || []" :key="item"
         type="button" class="emoji-cell" :aria-label="`插入表情 ${item}`"
@@ -82,16 +85,22 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
         <img :src="emojiSrc(item) || ''" :alt="item" loading="lazy" />
       </button>
     </div>
-    <!-- 底部类型选择器：当前只有「表情」可用，GIF 先占位（与 @ 提及入口同一套处理）。 -->
+    <!-- GIF 页：搜索 + 结果，点选后交给父组件待发送。 -->
+    <GifPanel v-else class="emoji-gif" @pick="emit('pick-gif', $event)" />
+
+    <!-- 底部类型选择器：表情 / GIF 两个页签，选中态用品牌强调色。 -->
     <div class="emoji-foot">
       <button
-        type="button" class="kind on" :aria-pressed="true" aria-label="表情" title="表情"
+        type="button" class="kind" :class="{ on: mode === 'emoji' }"
+        :aria-pressed="mode === 'emoji'" aria-label="表情" title="表情"
+        @click="mode = 'emoji'"
       >
         <ImIcon name="face" :size="26" />
       </button>
       <button
-        type="button" class="kind gif" disabled
-        title="GIF 即将上线" aria-label="GIF（即将上线）"
+        type="button" class="kind gif" :class="{ on: mode === 'gif' }"
+        :aria-pressed="mode === 'gif'" aria-label="GIF" title="GIF"
+        @click="mode = 'gif'"
       >
         <!-- GIF 徽标是 36 格、evenodd 填充的复合字形，和 ImIcon 的 24 格单路径线性体系不同源，
              所以直接内联；fill 用 currentColor 跟随按钮色（原稿是 #2F3035/.7，深色主题下不可见）。
@@ -114,9 +123,10 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
   right: 0;
   bottom: calc(100% + 8px);
   z-index: var(--vp-im-z-controls);
-  display: grid;
-  /* 分类条 / 表情栅格 / 底部类型选择器 */
-  grid-template-rows: auto 1fr auto;
+  /* 纵向三段：分类条（表情页才有）/ 内容 / 底部页签。用 flex 而不是 grid，
+     是因为 GIF 页要把分类条换成搜索框，grid 的行模板会留下一条空轨。 */
+  display: flex;
+  flex-direction: column;
   width: min(340px, calc(100vw - 40px));
   max-height: 300px;
   border-radius: 14px;
@@ -167,6 +177,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
   font-weight: 600;
 }
 .emoji-grid {
+  flex: 1;
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 2px;
@@ -193,6 +204,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
 /* 底部类型选择器：左边「表情」是当前分类（品牌色），右边「GIF」先占位。
    GIF 功能未实现，所以做成 disabled + 「即将上线」，不做成点了没反应的按钮。 */
 .emoji-foot {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -215,11 +227,12 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
   color: var(--vp-im-accent);
   cursor: default;
 }
-/* GIF 徽标自己画了圆环和字母，这里只需要给它一个弱一档的颜色。
+/* GIF 徽标自己画了圆环和字母，只给个默认的次级文字色；选中态由 .kind.on 接管。
    svg 用 30px：外圈环半径 11/36，渲染后圆环直径约 18.3px，比左边 26px 圆脸图标的 19.5px 略小。 */
-.kind.gif:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+/* GIF 页撑满中间那块，滚动交给它内部的列表。 */
+.emoji-gif {
+  flex: 1;
+  min-height: 0;
 }
 
 /* 窄屏：不再是一张挂在表情按钮左边的 340px 卡片（会向左溢出屏幕、右侧留一大块空），

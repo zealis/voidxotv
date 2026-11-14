@@ -13,6 +13,7 @@ import (
 	"github.com/yejie/voidxotv/internal/modules/content"
 	"github.com/yejie/voidxotv/internal/modules/delivery"
 	"github.com/yejie/voidxotv/internal/modules/feed"
+	"github.com/yejie/voidxotv/internal/modules/gifs"
 	"github.com/yejie/voidxotv/internal/modules/interactions"
 	"github.com/yejie/voidxotv/internal/modules/notifications"
 	"github.com/yejie/voidxotv/internal/modules/playback"
@@ -42,6 +43,7 @@ type Dependencies struct {
 	SEO           *seo.Handler
 	Admin         *admin.Handler
 	Interactions  *interactions.Handler
+	Gifs          *gifs.Handler
 	Search        *search.Handler
 	Notifications *notifications.Handler
 	Settings      *settings.Handler
@@ -88,6 +90,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 	if deps.Interactions != nil {
 		deps.Interactions.RegisterRoutes(mux)
+	}
+	if deps.Gifs != nil {
+		deps.Gifs.RegisterRoutes(mux)
 	}
 	if deps.Search != nil {
 		deps.Search.RegisterRoutes(mux)

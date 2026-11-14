@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yejie/voidxotv/internal/modules/admin"
 	"github.com/yejie/voidxotv/internal/modules/auth"
+	"github.com/yejie/voidxotv/internal/modules/gifs"
 	"github.com/yejie/voidxotv/internal/modules/notifications"
 	"github.com/yejie/voidxotv/internal/modules/stats"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
@@ -455,6 +456,14 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, admin.ErrInvalidInput)
 		return
 	}
+	// GIF 标记里的地址只能是集成过的图源（apihz / klipy）：评论正文会被渲染成 <img>，
+	// 放开任意 https 等于给评论一条嵌外部图片（追踪像素）的口子。
+	for _, raw := range gifs.Markers(body) {
+		if !gifs.ValidGifURL(raw) {
+			h.fail(w, r, fmt.Errorf("%w: 表情包地址无效，请重新选择", admin.ErrInvalidInput))
+			return
+		}
+	}
 	principal, _ := auth.PrincipalFromContext(r.Context())
 
 	// 回复压平到顶层：parent 必须是同内容的可见评论；
@@ -494,11 +503,16 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.notifyComment(r.Context(), id, principal, body)
-	if parentID > 0 {
-		h.notifyCommentReply(r.Context(), id, principal, parentID, replyToUser, body)
+	// 通知里只给可读文本：把 GIF 标记换成 [GIF]，否则通知摘要会露出 [[gif:https://…]]。
+	plain := gifs.StripMarkers(body)
+	if plain == "" {
+		plain = "[GIF]"
 	}
-	h.notifyMentions(r.Context(), id, principal, body)
+	h.notifyComment(r.Context(), id, principal, plain)
+	if parentID > 0 {
+		h.notifyCommentReply(r.Context(), id, principal, parentID, replyToUser, plain)
+	}
+	h.notifyMentions(r.Context(), id, principal, plain)
 
 	// 作者信息此时还没进列表，单独回填一次：客户端用返回值替换乐观插入的占位条目。
 	var displayName, avatarKey string

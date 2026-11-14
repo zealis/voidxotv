@@ -75,6 +75,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		h.wrap(PermSettingsRead, false, h.hotWeights))
 	mux.Handle("PUT /api/v1/admin/settings/hot-weights",
 		h.wrap(PermSettingsWrite, true, h.updateHotWeights))
+	// 功能开关（§4.7）：GIF 表情包的图源与密钥，密钥只存服务端、不下发浏览器。
+	mux.Handle("GET /api/v1/admin/settings/gif",
+		h.wrap(PermSettingsRead, false, h.gifConfig))
+	mux.Handle("PUT /api/v1/admin/settings/gif",
+		h.wrap(PermSettingsWrite, true, h.updateGifConfig))
 
 	// 账号与权限（§4.7）：只有超管能看/改，改完吊销目标会话强制重新登录。
 	mux.Handle("GET /api/v1/admin/accounts", h.wrap(PermAccountRead, false, h.accounts))

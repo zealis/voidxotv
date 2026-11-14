@@ -166,7 +166,9 @@ export function useAdminApi() {
       if (status === 401) session.value = null
       const body = (error as { data?: { error?: { message?: string } } }).data
       // 后台同样不向界面暴露 HTTP 状态、英文内部错误等开发术语。
-      const raw = body?.error?.message || ''
+      // 后台错误形如 `admin: invalid input: 中文说明`：先剥掉英文前缀再判可读性，
+      // 否则中文说明会被下面的技术词过滤（invalid）连坐，只剩一句「请求失败」。
+      const raw = (body?.error?.message || '').replace(/^admin:[^:]*:\s*/, '')
       const clean = raw && /[\u4e00-\u9fff]/.test(raw)
         && !/HTTP|CSRF|token|sql|undefined|null|internal|unexpected|invalid|timeout/i.test(raw)
       throw new Error(clean ? raw : '请求失败，请稍后再试')

@@ -26,6 +26,8 @@ const modules = [
     desc: '24 小时并单受理、处置联动与举报人反馈。' },
   { key: 'settings', label: '系统设置', icon: 'settings', permission: 'settings:read',
     desc: '存储、交付、转码的脱敏状态与运行诊断、审计日志。' },
+  { key: 'flags', label: '功能开关', icon: 'toggle', permission: 'settings:read',
+    desc: 'GIF 表情包等需要外部凭据的能力；密钥只存服务端。' },
   { key: 'accounts', label: '账号权限', icon: 'lock', permission: 'accounts:read',
     desc: '后台账号、角色与口令；变更会立即吊销目标账号的登录会话。' },
 ] as const
@@ -137,6 +139,7 @@ onBeforeUnmount(() => {
       <AdminTopics v-else-if="active === 'topics'" />
       <AdminReports v-else-if="active === 'reports'" />
       <AdminSettings v-else-if="active === 'settings'" />
+      <AdminFeatureFlags v-else-if="active === 'flags'" />
       <AdminAccounts v-else-if="active === 'accounts'" />
       <p v-else class="empty">当前角色没有可访问的模块。</p>
     </main>

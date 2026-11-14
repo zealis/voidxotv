@@ -20,6 +20,7 @@ import (
 	"github.com/yejie/voidxotv/internal/modules/content"
 	"github.com/yejie/voidxotv/internal/modules/delivery"
 	"github.com/yejie/voidxotv/internal/modules/feed"
+	"github.com/yejie/voidxotv/internal/modules/gifs"
 	"github.com/yejie/voidxotv/internal/modules/interactions"
 	"github.com/yejie/voidxotv/internal/modules/notifications"
 	"github.com/yejie/voidxotv/internal/modules/playback"
@@ -87,6 +88,8 @@ func run() error {
 	interactionsHandler := interactions.NewHandler(db,
 		stats.NewCounters(cacheStore.Client()), authHandler, adminRepo, log)
 	notificationsHandler := notifications.NewHandler(db, authHandler, log)
+	// GIF 表情包：服务端代理上游图源（密钥不出站），搜索按人限流并落库缓存。
+	gifsHandler := gifs.NewHandler(db, authHandler, cacheStore.Client(), log)
 	// M11：用户侧设置页（账号 / 隐私 / 通知 / 播放 / 通用），通知偏好由此生效。
 	settingsHandler := settings.NewHandler(settings.NewRepository(db), authHandler, log)
 	// 改密后吊销全部会话（§11.4）：设置页需要能触达会话存储。
@@ -142,7 +145,7 @@ func run() error {
 			Playback: playbackHandler, Feed: feedHandler, Delivery: deliveryHandler,
 			SEO: seoHandler, Admin: adminHandler, Interactions: interactionsHandler,
 			Search: searchHandler, Notifications: notificationsHandler,
-			Settings: settingsHandler,
+			Settings: settingsHandler, Gifs: gifsHandler,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
