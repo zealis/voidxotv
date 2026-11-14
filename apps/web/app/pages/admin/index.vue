@@ -8,28 +8,19 @@ import 'element-plus/theme-chalk/dark/css-vars.css'
 definePageMeta({ ssr: false })
 useSeoMeta({
   title: '运营后台 · 夜街',
-  robots: 'noindex,nofollow',
-})
+  robots: 'noindex,nofollow' })
 
 const { session, booting, loadSession, logout, can } = useAdminApi()
 
 const modules = [
-  { key: 'overview', label: '数据概览', icon: 'chart', permission: 'stats:read',
-    desc: '核心指标、近 7 日趋势、待审存量与热门作品；数据每 5 分钟更新。' },
-  { key: 'review', label: '内容审核', icon: 'shield', permission: 'reviews:read',
-    desc: '按风险分排序的审核队列；通过、驳回、下架与限流均写审计日志。' },
-  { key: 'users', label: '用户管理', icon: 'user', permission: 'users:read',
-    desc: '用户查询、状态处置与创作者认证；封禁立即使会话失效。' },
-  { key: 'topics', label: '话题运营', icon: 'hash', permission: 'topics:read',
-    desc: '话题创建、自建话题审核、合并、置顶与下线。' },
-  { key: 'reports', label: '举报中心', icon: 'flag', permission: 'reports:read',
-    desc: '24 小时并单受理、处置联动与举报人反馈。' },
-  { key: 'settings', label: '系统设置', icon: 'settings', permission: 'settings:read',
-    desc: '存储、交付、转码的脱敏状态与运行诊断、审计日志。' },
-  { key: 'flags', label: '功能开关', icon: 'toggle', permission: 'settings:read',
-    desc: 'GIF 表情包等需要外部凭据的能力；密钥只存服务端。' },
-  { key: 'accounts', label: '账号权限', icon: 'lock', permission: 'accounts:read',
-    desc: '后台账号、角色与口令；变更会立即吊销目标账号的登录会话。' },
+  { key: 'overview', label: '数据概览', icon: 'chart', permission: 'stats:read' },
+  { key: 'review', label: '内容审核', icon: 'shield', permission: 'reviews:read' },
+  { key: 'users', label: '用户管理', icon: 'user', permission: 'users:read' },
+  { key: 'topics', label: '话题运营', icon: 'hash', permission: 'topics:read' },
+  { key: 'reports', label: '举报中心', icon: 'flag', permission: 'reports:read' },
+  { key: 'settings', label: '系统设置', icon: 'settings', permission: 'settings:read' },
+  { key: 'flags', label: '功能开关', icon: 'toggle', permission: 'settings:read' },
+  { key: 'accounts', label: '账号权限', icon: 'lock', permission: 'accounts:read' },
 ] as const
 
 type ModuleKey = (typeof modules)[number]['key']
@@ -50,8 +41,7 @@ const current = computed(() => (
 ))
 
 const roleLabels: Record<string, string> = {
-  super_admin: '超级管理员', reviewer: '审核员', operator: '运营', readonly: '只读',
-}
+  super_admin: '超级管理员', reviewer: '审核员', operator: '运营', readonly: '只读' }
 
 function openReview(contentId: number) {
   focusReviewId.value = contentId
@@ -126,10 +116,7 @@ onBeforeUnmount(() => {
 
     <main class="main">
       <header class="page-head">
-        <div>
-          <h1>{{ current.label }}</h1>
-          <p>{{ current.desc }}</p>
-        </div>
+        <h1>{{ current.label }}</h1>
         <span class="role-chip">{{ roleLabels[session.role] || session.role }}</span>
       </header>
 
@@ -224,11 +211,10 @@ onBeforeUnmount(() => {
     #0b0b0d;
 }
 .page-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   gap: 16px; margin-bottom: 18px;
 }
-.page-head h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; color: #fafafa; }
-.page-head p { margin: 0; font-size: 12px; color: #8b8b93; max-width: 720px; line-height: 1.6; }
+.page-head h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; color: #fafafa; }
 .role-chip {
   padding: 4px 10px; border-radius: 99px; font-size: 11px;
   background: rgba(255, 255, 255, 0.06); color: #d4d4d8; white-space: nowrap;
