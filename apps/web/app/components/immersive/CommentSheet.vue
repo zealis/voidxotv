@@ -492,7 +492,13 @@ function isMine(item: { user_id: number; id: number }): boolean {
             <EmojiPanel v-if="emojiOpen" @pick="insertEmoji" @pick-gif="onPickGif" />
           </div>
           <button type="submit" :disabled="(!draft.trim() && !pendingGif) || posting" aria-label="发送评论">
-            <ImIcon name="share" :size="18" />
+            <!-- 纸飞机：24 格单路径，画在品牌色圆钮上用纯白填充 -->
+            <svg class="send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                fill="#ffffff"
+                d="m3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12L2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91"
+              />
+            </svg>
           </button>
         </div>
         <p v-if="postFailed" class="failed-hint" role="status">发送失败，草稿已保留，可重试。</p>
@@ -656,6 +662,8 @@ function isMine(item: { user_id: number; id: number }): boolean {
 }
 .composer input:focus { border-color: var(--vp-im-accent); }
 .composer button[type="submit"] {
+  display: grid;
+  place-items: center;
   width: 44px;
   height: 44px;
   border: 0;
@@ -665,6 +673,8 @@ function isMine(item: { user_id: number; id: number }): boolean {
   cursor: pointer;
 }
 .composer button[type="submit"]:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 图标 18px：与原先 ImIcon 的显示尺寸一致，圆钮内两侧留白才是匀的。 */
+.composer .send-icon { width: 18px; height: 18px; display: block; }
 /* 表情面板以这里为定位锚点（面板向右对齐、浮在输入区上方）。
    窄屏时改成 static，让面板去以整条 .composer 为基准铺满一行，见 EmojiPanel。 */
 .composer .pickers {
