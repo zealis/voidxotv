@@ -49,10 +49,25 @@ func (h *Handler) SetImageStore(store *objectstore.Store) { h.store = store }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/notifications", h.auth.RequireAuth(http.HandlerFunc(h.list)))
+	// 底栏小粉点只要一个数字：独立端点，避免每个页面挂载时都拉一遍列表。
+	mux.Handle("GET /api/v1/notifications/unread", h.auth.RequireAuth(http.HandlerFunc(h.unreadOnly)))
 	// 先鉴权再校验 CSRF：RequireCSRF 依赖上下文中的 principal。
 	mux.Handle("POST /api/v1/notifications/read", h.guarded(h.markRead))
 	// 单条删除（§9.1 左滑删除）的非手势等价入口走同一个端点。
 	mux.Handle("DELETE /api/v1/notifications/{id}", h.guarded(h.remove))
+}
+
+// unreadOnly 只返回未读数与分桶，不查列表：底栏每页都要用，必须便宜。
+func (h *Handler) unreadOnly(w http.ResponseWriter, r *http.Request) {
+	principal, _ := auth.PrincipalFromContext(r.Context())
+	unread, buckets, err := h.unreadCounts(r.Context(), principal.UserID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpserver.JSON(w, http.StatusOK, map[string]any{
+		"unread": unread, "unread_by_category": buckets,
+	})
 }
 
 // guarded 固定「先鉴权再校验 CSRF」的顺序：RequireCSRF 依赖上下文里的 principal。

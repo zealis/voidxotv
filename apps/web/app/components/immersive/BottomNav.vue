@@ -12,6 +12,8 @@ const props = withDefaults(defineProps<{
 })
 
 const route = useRoute()
+// 未读消息：底栏「消息」右上角的小粉点（不复用计数文案，避免干扰导航）。
+const { count: unread } = useUnread()
 
 // 按路由前缀高亮，子页（/me/relations、/me/drafts）仍归属「我的」。
 const active = computed(() => {
@@ -50,6 +52,7 @@ const active = computed(() => {
       :aria-current="active === 'messages' ? 'page' : undefined" aria-label="消息"
     >
       <ImIcon name="message" :size="22" /><span>消息</span>
+      <span v-if="unread > 0" class="dot" aria-hidden="true" />
     </NuxtLink>
     <NuxtLink
       to="/me" class="nav-item" :class="{ active: active === 'me' }"
@@ -74,6 +77,21 @@ const active = computed(() => {
   border-width: 1px 0 0;
   border-radius: 0;
 }
+/* 未读粉点：挂在「消息」图标右上。用品牌强调色，直径 7px——
+   再小在 1x 屏上看不见，再大就成了「角标」而不是提示。 */
+.nav-item .dot {
+  position: absolute;
+  /* 图标 22px：右边缘在 50%+11，圆点骑在这条边上（再往左就压住图形笔画）。 */
+  top: 4px;
+  left: calc(50% + 8px);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vp-im-accent);
+  /* 与底栏玻璃底同色的细描边，避免落在图标笔画上糊成一团。 */
+  box-shadow: 0 0 0 2px rgba(18, 18, 32, 0.9);
+}
+
 /* PC 端：视频播放中收起底栏，暂停后恢复。移动端（≤780px）不匹配这条规则，
    底栏保持常驻，控制条也本来就在移动端隐藏，两者互不干扰。 */
 @media (min-width: 781px) {
@@ -89,6 +107,7 @@ const active = computed(() => {
   }
 }
 .nav-item {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 2px;
