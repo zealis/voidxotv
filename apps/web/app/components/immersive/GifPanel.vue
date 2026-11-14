@@ -35,6 +35,10 @@ async function load(reset = true) {
     page.value = data.page || target
     maxPage.value = data.max_page || 1
     loadedOnce.value = true
+    // 一页填不满容器时滚不动，滚动事件永远不触发：补一次「撑满」检查。
+    await nextTick()
+    const el = scrollBox.value
+    if (el && el.scrollHeight <= el.clientHeight + 4) void loadMoreIfNeeded()
   } catch (cause) {
     // 三种状态要分开说：没配源、没登录、真出错。混成一句「加载失败」等于让人无从下手。
     if (cause instanceof ApiError && cause.code === 'gif_not_configured') {
@@ -49,6 +53,31 @@ async function load(reset = true) {
   } finally {
     loading.value = false
   }
+}
+
+// 滚到底自动接下一批（无限加载）：容器滚不动的一屏内容太少，所以用阈值提前 120px 触发，
+// 避免用户看到「滑到底了但还是空的」那一下停顿。
+const scrollBox = ref<HTMLElement | null>(null)
+const loadingMore = ref(false)
+
+function nearBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 120
+}
+
+async function loadMoreIfNeeded() {
+  if (loading.value || loadingMore.value) return
+  if (page.value >= maxPage.value) return
+  loadingMore.value = true
+  try {
+    await load(false)
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+function onScroll(event: Event) {
+  const el = event.target as HTMLElement | null
+  if (el && nearBottom(el)) void loadMoreIfNeeded()
 }
 
 function search() {
@@ -79,7 +108,7 @@ onMounted(() => { void load(true) })
       </button>
     </form>
 
-    <div class="gif-scroll">
+    <div ref="scrollBox" class="gif-scroll" @scroll.passive="onScroll">
       <p v-if="error" class="gif-msg" role="status">
         {{ error }}
         <button v-if="needLogin" type="button" class="gif-link" @click="signIn">去登录</button>
@@ -99,10 +128,11 @@ onMounted(() => { void load(true) })
         </button>
       </div>
 
-      <button
-        v-if="items.length && page < maxPage" type="button" class="gif-more"
-        :disabled="loading" @click="load(false)"
-      >{{ loading ? '加载中…' : '加载更多' }}</button>
+      <!-- 无限加载：到底自动续，这一行只是在续接时给个「在加载」的反馈。 -->
+      <p v-if="items.length && page < maxPage" class="gif-more">
+        {{ loading || loadingMore ? '加载中…' : '继续下滑加载更多' }}
+      </p>
+      <p v-else-if="items.length" class="gif-more">没有更多了</p>
     </div>
   </div>
 </template>
@@ -143,11 +173,11 @@ onMounted(() => { void load(true) })
 .gif-search button:hover:not(:disabled) { color: var(--vp-im-text-primary); }
 .gif-search button:disabled { opacity: 0.5; cursor: not-allowed; }
 .gif-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; overscroll-behavior: contain; }
-.gif-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.gif-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .gif-cell {
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--vp-im-surface-raised);
   overflow: hidden;
   aspect-ratio: 1;
@@ -159,7 +189,7 @@ onMounted(() => { void load(true) })
 .gif-skeleton {
   display: block;
   aspect-ratio: 1;
-  border-radius: 10px;
+  border-radius: 8px;
   background: linear-gradient(100deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
   background-size: 200% 100%;
   animation: gifSweep 1.2s linear infinite;
@@ -189,16 +219,11 @@ onMounted(() => { void load(true) })
   cursor: pointer;
 }
 .gif-more {
-  display: block;
-  width: 100%;
-  margin: 8px 0 2px;
-  padding: 7px 0;
-  border: 1px solid var(--vp-im-glass-border);
-  border-radius: 8px;
-  background: none;
+  margin: 6px 0 2px;
+  padding: 4px 0;
+  font-size: 11px;
   color: var(--vp-im-text-secondary);
-  font-size: 12px;
-  cursor: pointer;
+  text-align: center;
+  opacity: 0.75;
 }
-.gif-more:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
