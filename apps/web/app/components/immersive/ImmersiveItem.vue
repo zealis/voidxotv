@@ -143,6 +143,17 @@ function togglePop(name: 'rate' | 'quality' | 'volume') {
   openPop.value = openPop.value === name ? '' : name
 }
 
+// 音量键：静音时这一下直接恢复声音。画面上那枚「点击取消静音」浮层已去掉，
+// 用户点音量图标的心智就是「把声音打开」，不该要求他先开弹层再拖滑块。
+function onVolumeClick() {
+  if (props.player.muted) {
+    emit('unmute')
+    openPop.value = ''
+    return
+  }
+  togglePop('volume')
+}
+
 // 暂未实现的条目明确说「即将开放」，不做点了没反应的死按钮。
 function soon(name: string) {
   openPop.value = ''
@@ -318,13 +329,6 @@ function onSeek(event: MouseEvent) {
       <span v-else-if="props.player.loading" class="loading">载入中…</span>
     </div>
 
-    <button
-      v-if="props.active && props.player.muted && props.item.type === 'video' && props.player.ready"
-      type="button" class="unmute vp-glass vp-glass-compact" @click="emit('unmute')"
-    >
-      <ImIcon name="mute" :size="16" />点击取消静音
-    </button>
-
     <!-- 弹幕层：滚动弹幕覆盖在画面上（弹开关控制显示） -->
     <div v-if="danmakuOn" class="danmaku-layer" aria-hidden="true">
       <span
@@ -430,7 +434,7 @@ function onSeek(event: MouseEvent) {
         <span class="pb-anchor pb-secondary">
           <button
             type="button" class="pb-btn" :aria-expanded="openPop === 'volume'"
-            :aria-label="props.player.muted ? '音量（当前静音）' : '音量'" @click="togglePop('volume')"
+            :aria-label="props.player.muted ? '取消静音' : '音量'" @click="onVolumeClick"
           >
             <ImIcon :name="props.player.muted ? 'mute' : 'volume'" :size="18" />
           </button>
@@ -451,6 +455,17 @@ function onSeek(event: MouseEvent) {
         </button>
       </div>
     </div>
+
+    <!-- ≤780px 不渲染整条功能栏（设计如此），而自动播放默认静音：
+         没有这个入口，手机端就永远没有声音。放顶栏「搜索」左边的纯图标位，
+         点一下即恢复声音，取消静音后自己消失（不再用带文字的浮层挡画面）。 -->
+    <button
+      v-if="props.active && props.item.type === 'video' && props.player.ready && props.player.muted"
+      type="button" class="mobile-unmute"
+      aria-label="取消静音" @click="emit('unmute')"
+    >
+      <ImIcon name="mute" :size="22" />
+    </button>
 
     <!-- 图集指示器（§5.4）：胶囊底 + 当前张实心点 + 序号，避免散点贴在画面上看不清。 -->
     <div
@@ -615,20 +630,7 @@ function onSeek(event: MouseEvent) {
   pointer-events: auto;
 }
 .loading { padding: 10px 16px; border-radius: 999px; background: rgba(10,10,20,.55); font-size: 12px; }
-.unmute {
-  position: absolute;
-  top: calc(78px + env(safe-area-inset-top));
-  left: 16px;
-  z-index: var(--vp-im-z-player);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  color: var(--vp-im-text-primary);
-  font-size: 12px;
-  cursor: pointer;
-}
+
 .gallery-indicator {
   position: absolute;
   left: 50%;
@@ -897,6 +899,26 @@ function onSeek(event: MouseEvent) {
    弹幕走作者名上方的「弹」→ 底部输入条（参考移动端的克制布局）。 */
 @media (max-width: 780px) {
   .player-bar { display: none; }
+
+  /* 功能条在手机上不渲染，静音入口放在顶栏「搜索」左边（同一行、44px 见方的图标位），
+     不压作者信息、不压右侧按钮列，也不挡画面中间。 */
+  .mobile-unmute {
+    position: absolute;
+    top: calc(env(safe-area-inset-top) + 10px);
+    right: 68px;
+    z-index: var(--vp-im-z-controls);
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: #fff;
+    cursor: pointer;
+  }
+  .mobile-unmute:active { background: rgba(255, 255, 255, 0.12); }
 }
 
 /* 移动端弹幕输入条（由信息层的「弹」唤起）。 */
