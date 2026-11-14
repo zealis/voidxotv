@@ -13,12 +13,21 @@ const { open: openAuthDialog } = useAuthDialog()
 const query = ref('')
 const items = ref<string[]>([])
 const page = ref(1)
-const maxPage = ref(1)
+// max_page = 0 表示上游没告诉我们总页数（API 盒子的热门接口就是这样），
+// 这时不能当成「只有一页」，要一直加载到某一页返回空、或返回的全是已见过的图为止。
+const maxPage = ref(0)
+const exhausted = ref(false)
 const loading = ref(false)
 const error = ref('')
 const needLogin = ref(false)
 const needConfig = ref(false)
 const loadedOnce = ref(false)
+
+const hasMore = computed(() => {
+  if (exhausted.value) return false
+  if (maxPage.value > 0) return page.value < maxPage.value
+  return items.value.length > 0
+})
 
 async function load(reset = true) {
   if (loading.value) return
@@ -31,9 +40,21 @@ async function load(reset = true) {
     const data = await api<{ items: string[]; page: number; max_page: number }>(
       `/api/v1/gifs/search?q=${encodeURIComponent(query.value.trim())}&page=${target}`,
     )
-    items.value = reset ? data.items : [...items.value, ...data.items]
+    const incoming = data.items || []
+    // 去重：上游分页界限偶尔会把同一批图再给一遍（热门尤其明显），重复 key 会让列表抖。
+    const known = new Set(items.value)
+    const fresh = reset ? incoming : incoming.filter((url) => !known.has(url))
+    if (reset) {
+      items.value = incoming
+      exhausted.value = false
+    } else {
+      // 空页或原地打转 = 没有更多了。上游不给 total 时，这是唯一的终止条件。
+      if (!incoming.length || !fresh.length) exhausted.value = true
+      items.value = [...items.value, ...fresh]
+    }
     page.value = data.page || target
-    maxPage.value = data.max_page || 1
+    maxPage.value = data.max_page || 0
+    if (maxPage.value > 0 && page.value >= maxPage.value) exhausted.value = true
     loadedOnce.value = true
     // 一页填不满容器时滚不动，滚动事件永远不触发：补一次「撑满」检查。
     await nextTick()
@@ -66,7 +87,7 @@ function nearBottom(el: HTMLElement): boolean {
 
 async function loadMoreIfNeeded() {
   if (loading.value || loadingMore.value) return
-  if (page.value >= maxPage.value) return
+  if (!hasMore.value) return
   loadingMore.value = true
   try {
     await load(false)
@@ -83,6 +104,8 @@ function onScroll(event: Event) {
 function search() {
   items.value = []
   page.value = 1
+  maxPage.value = 0
+  exhausted.value = false
   loadedOnce.value = false
   void load(true)
 }
@@ -129,7 +152,7 @@ onMounted(() => { void load(true) })
       </div>
 
       <!-- 无限加载：到底自动续，这一行只是在续接时给个「在加载」的反馈。 -->
-      <p v-if="items.length && page < maxPage" class="gif-more">
+      <p v-if="items.length && hasMore" class="gif-more">
         {{ loading || loadingMore ? '加载中…' : '继续下滑加载更多' }}
       </p>
       <p v-else-if="items.length" class="gif-more">没有更多了</p>

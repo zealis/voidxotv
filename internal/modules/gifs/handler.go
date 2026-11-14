@@ -29,6 +29,27 @@ const (
 	rateLimitMax = 20 // 每人每分钟
 )
 
+// flexInt 兼容上游「数字 / 字符串 / 空」三种形态。
+// API 盒子实测：搜索返回 {"page":"1","maxpage":3075,"count":"9223"}——page 与 count 是字符串，
+// maxpage 是数字；热门干脆不带这三个字段。用 int 硬解会让整条响应解码失败（500 → 前端「服务不可用」）。
+type flexInt int
+
+func (f *flexInt) UnmarshalJSON(raw []byte) error {
+	text := strings.Trim(strings.TrimSpace(string(raw)), `"`)
+	if text == "" || text == "null" {
+		*f = 0
+		return nil
+	}
+	parsed, err := strconv.Atoi(text)
+	if err != nil {
+		// 单个字段异常不该废掉整个响应：当 0 处理（0 在上层有「未知」语义）。
+		*f = 0
+		return nil
+	}
+	*f = flexInt(parsed)
+	return nil
+}
+
 // httpClient 单独拿出来，测试里可以换成 httptest 的 client。
 var httpClient = &http.Client{Timeout: 8 * time.Second}
 
@@ -52,6 +73,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	httpserver.Error(w, status, code, message, httpserver.RequestIDFromContext(r.Context()))
 }
+
+// upstreamError 表示上游返回了可读的业务错误（如「通讯秘钥不正确」），
+// handler 会把这句话转给前端，而不是统一成「服务暂时不可用」。
+type upstreamError struct{ message string }
+
+func (e *upstreamError) Error() string { return "gifs: upstream: " + e.message }
 
 // searchResult 是缓存与响应共用的结构（图片地址 + 翻页信息）。
 type searchResult struct {
@@ -124,6 +151,15 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	result, err := h.fetch(r.Context(), cfg, keyword, page)
 	if err != nil {
 		h.log.Warn("gifs: upstream", "error", err, "query", keyword, "page", page)
+		var business *upstreamError
+		if errors.As(err, &business) {
+			message := []rune(business.message)
+			if len(message) > 120 {
+				message = message[:120]
+			}
+			h.fail(w, r, http.StatusBadGateway, "gif_upstream_failed", string(message))
+			return
+		}
 		h.fail(w, r, http.StatusBadGateway, "gif_upstream_failed", "表情包服务暂时不可用，请稍后再试")
 		return
 	}
@@ -187,18 +223,24 @@ func (h *Handler) fetch(ctx context.Context, cfg Config, keyword string, page in
 	}
 
 	var payload struct {
-		Code    int      `json:"code"`
+		Code    flexInt  `json:"code"`
 		Msg     string   `json:"msg"`
 		Res     []string `json:"res"`
-		Page    int      `json:"page"`
-		MaxPage int      `json:"maxpage"`
-		Count   int      `json:"count"`
+		Page    flexInt  `json:"page"`
+		MaxPage flexInt  `json:"maxpage"`
+		Count   flexInt  `json:"count"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return searchResult{}, fmt.Errorf("gifs: decode upstream: %w", err)
 	}
-	if payload.Code != 200 {
-		return searchResult{}, fmt.Errorf("gifs: upstream code %d: %s", payload.Code, payload.Msg)
+	if int(payload.Code) != 200 {
+		// 上游的业务错误（密钥不对、额度用尽）文案本身就是中文且可操作，原样带出去；
+		// 只截断长度，不吞掉它——否则用户只能看到「服务暂时不可用」。
+		message := strings.TrimSpace(payload.Msg)
+		if message != "" {
+			return searchResult{}, &upstreamError{message: message}
+		}
+		return searchResult{}, fmt.Errorf("gifs: upstream code %d", int(payload.Code))
 	}
 
 	items := make([]string, 0, len(payload.Res))
@@ -207,12 +249,11 @@ func (h *Handler) fetch(ctx context.Context, cfg Config, keyword string, page in
 			items = append(items, cleaned)
 		}
 	}
-	result := searchResult{Items: items, Page: page, MaxPage: payload.MaxPage, Count: len(items)}
-	if result.Page < 1 {
-		result.Page = page
-	}
-	if result.MaxPage < 1 {
-		result.MaxPage = 1
+	// MaxPage = 0 表示「上游没告诉我们还有多少页」（热门接口就是这样），
+	// 交给前端按「直到某一页返回空 / 全是重复」来判断到底，不要在这里兜成 1 页把无限加载掐死。
+	result := searchResult{Items: items, Page: page, MaxPage: int(payload.MaxPage), Count: len(items)}
+	if result.MaxPage < 0 {
+		result.MaxPage = 0
 	}
 	return result, nil
 }
