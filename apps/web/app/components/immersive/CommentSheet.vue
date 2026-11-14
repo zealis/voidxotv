@@ -692,10 +692,8 @@ function isMine(item: { user_id: number; id: number }): boolean {
   color: var(--vp-im-text-secondary);
   cursor: pointer;
 }
-.composer .pick:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--vp-im-text-primary);
-}
+/* 悬停只把图标提亮，不再画一块灰色圆角底框。 */
+.composer .pick:hover:not(:disabled) { color: var(--vp-im-text-primary); }
 .composer .pick.on { color: var(--vp-im-accent); }
 /* @ 提及仍是占位：可见但不可点，视觉上比输入框弱一档。 */
 .composer .pick:disabled { cursor: not-allowed; opacity: 0.72; }

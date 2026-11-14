@@ -39,6 +39,29 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.23.7] - 2026-11-14
+
+### 改进
+
+- **默认头像改用 DiceBear Critters**：`internal/platform/avatar/dicebear.go` 的 `Endpoint`
+  从 `10.x/micah/png` 换成 `10.x/critters/png`。新用户默认头像、设置页「随机头像
+  6 选 1」、后台给用户设置头像共用同一份实现，三处一起切换。
+  - 源文件从 `micah.go` 重命名为 `dicebear.go`（内容是通用的 seed 生成与 PNG
+    下载校验，不该绑死风格）；同步 `cmd/api/main.go`、
+    `internal/modules/auth/default_avatar.go`、`internal/modules/admin/user_avatar.go`
+    的注释与 `README.md`「默认头像」章节。
+  - Critters 由 DiceBear 以 **CC0 1.0**（公有领域）发布，不要求署名；原 Micah 的
+    CC BY 4.0 / Micah Lanier 署名因此失效，删掉 `apps/web/app/pages/settings.vue`
+    头像区那段小字，界面不再展示开发与许可说明，README 改记风格来源。
+  - `GET /api/v1/avatar/preview?seed=…` 实测 200 / `image/png`，与直连
+    `10.x/critters/png?seed=…&size=256` 字节完全一致（md5 相同），确认 API 重启后
+    走的是新风格；同源代理与 CSP 白名单不变。
+- **评论框图标去掉悬浮灰色底框**：`apps/web/app/components/immersive/CommentSheet.vue`
+  的 `.pick:hover:not(:disabled)` 删掉 `background: rgba(255,255,255,0.1)`，
+  只保留 `color` 提亮；悬停不再出现那块长方形圆角灰底。
+  - `m71-composer-inline.js` 加断言：悬停时背景为 `rgba(0, 0, 0, 0)`、图标仍提亮，
+    连同原有用例共 17 项全过。
+
 ## [0.23.6] - 2026-11-14
 
 ### 改进

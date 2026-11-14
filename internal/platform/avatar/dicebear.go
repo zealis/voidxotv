@@ -1,8 +1,8 @@
-// Package avatar 封装 DiceBear Micah 随机头像的 seed 生成与 PNG 下载。
+// Package avatar 封装 DiceBear 随机头像（当前 Critters 风格）的 seed 生成与 PNG 下载。
 // 注册默认头像、前台「随机头像 6 选 1」、后台给用户设置头像共用这一份实现。
 //
-// Micah 是 Micah Lanier《Avatar Illustration System》(CC BY 4.0) 的 remix，
-// 使用与署名见 README「默认头像」一节。
+// Critters 由 DiceBear 以 CC0 1.0（公有领域）发布，不要求署名；风格与 API 见
+// https://www.dicebear.com/styles/critters/ ，来源记在 README「默认头像」一节。
 package avatar
 
 import (
@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	Endpoint    = "https://api.dicebear.com/10.x/micah/png"
+	Endpoint    = "https://api.dicebear.com/10.x/critters/png"
 	Size        = 256
-	MaxBytes    = 256 << 10 // 256 KiB；实测 256px PNG 约 14 KiB
+	MaxBytes    = 256 << 10 // 256 KiB；实测 256px Critters PNG 约 10 KiB
 	FetchTTL    = 8 * time.Second
 	SeedBytes   = 12
 	PreviewTTL  = 24 * time.Hour

@@ -1,11 +1,10 @@
 package auth
 
-// 新用户默认头像：注册成功后异步取一张 DiceBear Micah 随机头像，落到自有对象存储，
+// 新用户默认头像：注册成功后异步取一张 DiceBear Critters 随机头像，落到自有对象存储，
 // 再把版本化 key 写进 users.avatar_key。与「用户自己上传头像」完全同一套读取路径
 // （settings.avatarURL → store.MediaURL），运行时不依赖 dicebear.com 是否在线。
 //
-// Micah 风格是 Micah Lanier《Avatar Illustration System》(CC BY 4.0) 的 remix，
-// 使用与署名见 README「默认头像」一节。
+// Critters 是 DiceBear 发布的 CC0 1.0 风格，不要求署名；来源见 README「默认头像」一节。
 
 import (
 	"context"

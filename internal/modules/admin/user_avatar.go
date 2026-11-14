@@ -1,6 +1,6 @@
 package admin
 
-// 后台「用户管理 → 设置头像」：从 6 张随机 DiceBear Micah 头像里选一张，
+// 后台「用户管理 → 设置头像」：从 6 张随机 DiceBear Critters 头像里选一张，
 // 复用 settings 的下载 / 存储 / 写库逻辑，避免两处各实现一遍。
 
 import (
