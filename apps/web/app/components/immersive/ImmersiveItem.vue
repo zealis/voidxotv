@@ -377,7 +377,18 @@ function onSeek(event: MouseEvent) {
         >
           弹<span v-if="danmakuOn" class="pb-dot" />
         </button>
-        <button type="button" class="pb-word pb-secondary" aria-label="弹幕设置" @click="soon('弹幕设置')">弹</button>
+        <button
+          type="button" class="pb-word pb-secondary pb-icon"
+          aria-label="弹幕设置" title="弹幕设置" @click="soon('弹幕设置')"
+        >
+          <!-- 弹幕设置：设计稿给的 24 格组合字形（漏斗 + 螺母），fill 跟随按钮色 -->
+          <svg class="danmaku-settings" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              fill="currentColor" fill-opacity=".9" fill-rule="evenodd" clip-rule="evenodd"
+              d="M18.755 13.874a1 1 0 0 1 .856.478l1.456 2.376a1 1 0 0 1 .02 1.009l-1.309 2.347a1 1 0 0 1-.869.513l-2.787.01a1 1 0 0 1-.856-.478l-1.456-2.376a1 1 0 0 1-.02-1.01l1.31-2.346a1 1 0 0 1 .869-.513l2.786-.01zM6.42 4.207c1.118 0 2.024.908 2.024 2.026v1.965a2.025 2.025 0 0 1-2.024 2.024H4.61a.175.175 0 0 0-.174.175v2c0 .096.078.176.174.176h1.81c1.118 0 2.024.906 2.024 2.024v1a4.326 4.326 0 0 1-4.325 4.325h-.509a.826.826 0 0 1 0-1.65h.51a2.676 2.676 0 0 0 2.675-2.675v-1a.376.376 0 0 0-.375-.375H4.61a1.826 1.826 0 0 1-1.825-1.825v-2c0-1.008.818-1.824 1.825-1.824h1.81a.376.376 0 0 0 .375-.375V6.233a.376.376 0 0 0-.375-.375H3.61a.826.826 0 0 1 0-1.65h2.81zM18.064 16.12a1.286 1.286 0 1 0-1.252 2.247 1.286 1.286 0 0 0 1.252-2.247zm-5.663.289h-2.76a.825.825 0 0 1 0-1.65h3.688l-.928 1.65zm3.336-12.65a.825.825 0 0 1 1.372.916l-.692 1.04h.314c1.118 0 2.025.907 2.025 2.025v3.628c0 .434-.138.835-.37 1.165h-2.987a1.4 1.4 0 0 0-1.22.714l-.842 1.498v-1.351h-1.742a2.026 2.026 0 0 1-2.026-2.026V7.74c0-1.119.907-2.026 2.026-2.026h.313l-.693-1.039a.826.826 0 0 1 1.373-.916l1.303 1.955h.543l1.303-1.955zm-4.517 7.61c0 .207.168.374.375.374h1.742V10.38H11.22v.99zm3.767.374h1.744a.376.376 0 0 0 .375-.375v-.989h-2.119v1.364zm-3.392-4.378a.375.375 0 0 0-.375.375v.989h2.117V7.365h-1.742zm3.392 1.364h2.12v-.99a.376.376 0 0 0-.376-.374h-1.744v1.364z"
+            />
+          </svg>
+        </button>
 
         <label class="pb-input">
           <ImIcon name="face" :size="16" />
@@ -760,6 +771,9 @@ function onSeek(event: MouseEvent) {
   cursor: pointer;
 }
 .pb-word:hover { background: rgba(255, 255, 255, 0.1); }
+/* 图标型按钮（弹幕设置）：与播放 / 音量那几颗 30px 方钮同尺寸，不再吃文字内边距。 */
+.pb-word.pb-icon { display: grid; place-items: center; padding: 0; }
+.pb-word .danmaku-settings { display: block; width: 18px; height: 18px; }
 .pb-word.on { color: var(--vp-im-accent); }
 .pb-dot {
   position: absolute;

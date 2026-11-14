@@ -39,6 +39,19 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.23.2] - 2026-11-14
+
+### 改进
+
+- **播放控制条 · 弹幕设置按钮**：原来是文字「弹」（和左边的弹幕开关长得一模一样），
+  换成设计给的 24 格组合字形（漏斗 + 螺母）SVG。
+  - `fill="currentColor"` + 保留 `fill-opacity=".9"`：设计稿是纯白，但控制条里其他图标走
+    `--vp-im-text-secondary`，直接写白会比邻居亮一档。
+  - 图标 18px 落在 30px 方钮里正中（偏差 0，靠 `.pb-word.pb-icon` 的 grid 居中，
+    不再吃文字的 `padding: 0 6px`），与左侧播放 / 音量图标同高。
+  - `.tools/headless-test/m67-danmaku-settings-icon.js`：10 项全过（无「弹」文字、24 格、
+    currentColor、18×18 / 30×30、居中、aria-label 与点击提示仍正常）。
+
 ## [0.23.1] - 2026-11-14
 
 ### 改进
