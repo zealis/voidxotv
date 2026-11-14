@@ -511,7 +511,7 @@ function formatBytes(value: number): string {
               {{ new Date(scope.row.created_at).toLocaleString('zh-CN', { hour12: false }) }}
             </template>
           </ElTableColumn>
-          <ElTableColumn prop="username" label="管理员" width="130" />
+          <ElTableColumn prop="admin_email" label="管理员邮箱" width="220" />
           <ElTableColumn prop="role" label="角色" width="110" />
           <ElTableColumn prop="action" label="动作" min-width="140" />
           <ElTableColumn label="对象" min-width="120">

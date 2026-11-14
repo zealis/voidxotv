@@ -4,7 +4,7 @@ import { ElAlert, ElButton, ElForm, ElFormItem, ElInput } from 'element-plus'
 const emit = defineEmits<{ success: [] }>()
 const { login } = useAdminApi()
 
-const username = ref('')
+const email = ref('')
 const password = ref('')
 const totpCode = ref('')
 const needTotp = ref(false)
@@ -14,13 +14,13 @@ const error = ref('')
 async function submit() {
   if (pending.value) return
   error.value = ''
-  if (!username.value.trim() || !password.value) {
-    error.value = '请输入后台账号与密码'
+  if (!email.value.trim() || !password.value) {
+    error.value = '请输入管理员邮箱与密码'
     return
   }
   pending.value = true
   try {
-    await login(username.value.trim(), password.value, totpCode.value.trim() || undefined)
+    await login(email.value.trim(), password.value, totpCode.value.trim() || undefined)
     password.value = ''
     totpCode.value = ''
     needTotp.value = false
@@ -51,8 +51,11 @@ async function submit() {
       <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
 
       <ElForm label-position="top" @submit.prevent="submit">
-        <ElFormItem label="管理员账号">
-          <ElInput v-model="username" placeholder="如 yj_reviewer" autocomplete="username" />
+        <ElFormItem label="管理员邮箱">
+          <ElInput
+            v-model="email" type="email" placeholder="如 ops@nightstreet.cn"
+            autocomplete="username" @keyup.enter="submit"
+          />
         </ElFormItem>
         <ElFormItem label="密码">
           <ElInput

@@ -66,7 +66,7 @@ async function submit() {
 
   <ElDialog v-model="open" title="修改我的密码" width="420px" @closed="reset">
     <p class="hint">
-      当前账号：<strong>{{ session?.username }}</strong>。修改成功后其它设备会立即退出，
+      当前账号：<strong>{{ session?.email }}</strong>。修改成功后其它设备会立即退出，
       当前会话保留。
     </p>
     <div class="form">

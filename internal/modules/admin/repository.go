@@ -48,7 +48,7 @@ func (r *Repository) WriteAudit(ctx context.Context, adminID int64, role, action
 type AuditEntry struct {
 	ID         int64           `json:"id"`
 	AdminID    int64           `json:"admin_id"`
-	Username   string          `json:"username"`
+	AdminEmail string          `json:"admin_email"`
 	Role       string          `json:"role"`
 	Action     string          `json:"action"`
 	ObjectType string          `json:"object_type"`
@@ -72,7 +72,7 @@ func (r *Repository) ListAudit(ctx context.Context, limit, cursor int64, actionP
 		pattern = "%" + replacer.Replace(actionPrefix) + "%"
 	}
 	rows, err := r.db.Query(ctx, `
-		SELECT a.id, a.admin_id, u.username, a.role, a.action, a.object_type, a.object_id,
+		SELECT a.id, a.admin_id, u.email, a.role, a.action, a.object_type, a.object_id,
 		       COALESCE(a.before_summary::text, 'null'), COALESCE(a.after_summary::text, 'null'),
 		       a.created_at
 		FROM admin_audit_logs a JOIN admin_users u ON u.id = a.admin_id
@@ -87,7 +87,7 @@ func (r *Repository) ListAudit(ctx context.Context, limit, cursor int64, actionP
 	for rows.Next() {
 		var entry AuditEntry
 		var before, after string
-		if err := rows.Scan(&entry.ID, &entry.AdminID, &entry.Username, &entry.Role,
+		if err := rows.Scan(&entry.ID, &entry.AdminID, &entry.AdminEmail, &entry.Role,
 			&entry.Action, &entry.ObjectType, &entry.ObjectID, &before, &after,
 			&entry.CreatedAt); err != nil {
 			return nil, err
@@ -100,7 +100,7 @@ func (r *Repository) ListAudit(ctx context.Context, limit, cursor int64, actionP
 
 type AdminAccount struct {
 	ID           int64
-	Username     string
+	Email        string
 	PasswordHash string
 	Role         string
 	Status       string
@@ -108,12 +108,14 @@ type AdminAccount struct {
 	TOTPSecret string
 }
 
-func (r *Repository) FindActiveAdmin(ctx context.Context, username string) (AdminAccount, error) {
+// FindActiveAdmin 按邮箱查后台账号。调用方先过 auth.NormalizeEmail，
+// 这里再 lower() 兜底：唯一索引建在 lower(email) 上，大小写不会漏查。
+func (r *Repository) FindActiveAdmin(ctx context.Context, email string) (AdminAccount, error) {
 	var account AdminAccount
 	err := r.db.QueryRow(ctx, `
-		SELECT id, username, password_hash, role, status, COALESCE(totp_secret, '')
-		FROM admin_users WHERE username = $1`, username).Scan(
-		&account.ID, &account.Username, &account.PasswordHash, &account.Role,
+		SELECT id, email, password_hash, role, status, COALESCE(totp_secret, '')
+		FROM admin_users WHERE lower(email) = lower($1)`, email).Scan(
+		&account.ID, &account.Email, &account.PasswordHash, &account.Role,
 		&account.Status, &account.TOTPSecret)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return account, ErrBadLogin

@@ -106,7 +106,7 @@ func hasPermission(role, permission string) bool {
 // Principal is the verified后台 identity; it is never derived from request bodies.
 type Principal struct {
 	AdminID   int64
-	Username  string
+	Email     string
 	Role      string
 	CSRF      string
 	TokenHash []byte
@@ -125,7 +125,7 @@ func principalFrom(ctx context.Context) (Principal, bool) {
 
 type sessionRecord struct {
 	AdminID           int64     `json:"admin_id"`
-	Username          string    `json:"username"`
+	Email             string    `json:"email"`
 	Role              string    `json:"role"`
 	CSRF              string    `json:"csrf"`
 	CreatedAt         time.Time `json:"created_at"`
@@ -371,7 +371,7 @@ func (h *Handler) RequireAdmin(next http.Handler) http.Handler {
 			return
 		}
 		principal := Principal{
-			AdminID: record.AdminID, Username: record.Username, Role: record.Role,
+			AdminID: record.AdminID, Email: record.Email, Role: record.Role,
 			CSRF: record.CSRF, TokenHash: tokenHash(cookie.Value),
 		}
 		next.ServeHTTP(w, r.WithContext(withPrincipal(r.Context(), principal)))

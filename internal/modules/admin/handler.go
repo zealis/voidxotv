@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yejie/voidxotv/internal/modules/auth"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 	"github.com/yejie/voidxotv/internal/platform/totp"
 )
@@ -101,7 +102,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // ── 后台会话 ──────────────────────────────────────────────────────
 
 type loginRequest struct {
-	Username string `json:"username"`
+	// 登录只认邮箱，与前台账号同一口径（0.17.0 起后台不再有用户名）。
+	Email    string `json:"email"`
 	Password string `json:"password"`
 	// TOTPCode 是启用二次验证后的 6 位动态码（§11.6）。
 	TOTPCode string `json:"totp_code"`
@@ -124,7 +126,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 			httpserver.RequestIDFromContext(r.Context()))
 		return
 	}
-	account, err := h.repo.FindActiveAdmin(r.Context(), strings.TrimSpace(request.Username))
+	account, err := h.repo.FindActiveAdmin(r.Context(), auth.NormalizeEmail(request.Email))
 	if err != nil {
 		h.sessions.NoteLoginFailure(r.Context(), ip)
 		h.writeError(w, r, ErrBadLogin)
@@ -153,7 +155,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	token, err := h.sessions.Create(r.Context(), sessionRecord{
-		AdminID: account.ID, Username: account.Username, Role: account.Role,
+		AdminID: account.ID, Email: account.Email, Role: account.Role,
 		CSRF: csrf, CreatedAt: now,
 		AbsoluteExpiresAt: now.Add(h.cfg.SessionAbsoluteTTL),
 	})
@@ -169,7 +171,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		Expires:  now.Add(h.cfg.SessionAbsoluteTTL),
 	})
 	httpserver.JSON(w, http.StatusOK, map[string]any{
-		"id": account.ID, "username": account.Username, "role": account.Role,
+		"id": account.ID, "email": account.Email, "role": account.Role,
 		"permissions": permissionsFor(account.Role), "csrf_token": csrf,
 	})
 }
@@ -188,7 +190,7 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	principal, _ := principalFrom(r.Context())
 	httpserver.JSON(w, http.StatusOK, map[string]any{
-		"id": principal.AdminID, "username": principal.Username, "role": principal.Role,
+		"id": principal.AdminID, "email": principal.Email, "role": principal.Role,
 		"permissions": permissionsFor(principal.Role), "csrf_token": principal.CSRF,
 	})
 }
@@ -725,7 +727,7 @@ func (h *Handler) totpSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	httpserver.JSON(w, http.StatusOK, map[string]string{
 		"secret":      secret,
-		"otpauth_url": totp.OTPAuthURI(secret, "yejie-admin", principal.Username),
+		"otpauth_url": totp.OTPAuthURI(secret, "yejie-admin", principal.Email),
 	})
 }
 

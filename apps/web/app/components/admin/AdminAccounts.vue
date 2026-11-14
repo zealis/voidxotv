@@ -8,7 +8,7 @@ import {
 // 目标必须重新登录，权限才按新角色生效。
 interface AccountRow {
   id: number
-  username: string
+  email: string
   role: string
   status: string
   created_at: string
@@ -33,8 +33,11 @@ const roleHints: Record<string, string> = {
   readonly: '只读，不能执行任何写操作',
 }
 
+// 后台登录标识与前台同一口径：只认邮箱（0.17.0 起取消用户名）。
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 const createDialog = reactive({
-  open: false, username: '', role: 'reviewer', password: '', pending: false, error: '',
+  open: false, email: '', role: 'reviewer', password: '', pending: false, error: '',
 })
 const resetDialog = reactive({
   open: false, target: null as AccountRow | null, password: '', pending: false, error: '',
@@ -60,27 +63,32 @@ onMounted(load)
 
 function openCreate() {
   createDialog.open = true
-  createDialog.username = ''
+  createDialog.email = ''
   createDialog.role = 'reviewer'
   createDialog.password = ''
   createDialog.error = ''
 }
 
-function validatePassword(password: string, username: string): string {
+// 邮箱本身与 @ 前面的本地部分都不许当密码（服务端同规则）。
+function validatePassword(password: string, email: string): string {
   if (password.length < 8) return '密码至少 8 位'
   if (password.length > 72) return '密码不能超过 72 字节'
   if (/\s/.test(password)) return '密码不能包含空白字符'
-  if (password.toLowerCase() === username.toLowerCase()) return '密码不能与账号相同'
+  const local = email.split('@')[0] || ''
+  const lower = password.toLowerCase()
+  if (lower === email.toLowerCase() || (local && lower === local.toLowerCase())) {
+    return '密码不能与登录邮箱相同'
+  }
   return ''
 }
 
 async function submitCreate() {
-  const username = createDialog.username.trim().toLowerCase()
-  if (!/^[a-z][a-z0-9_]{2,31}$/.test(username)) {
-    createDialog.error = '账号需 3–32 位小写字母/数字/下划线，且以字母开头'
+  const email = createDialog.email.trim().toLowerCase()
+  if (!EMAIL_PATTERN.test(email)) {
+    createDialog.error = '请输入有效的邮箱地址'
     return
   }
-  const invalid = validatePassword(createDialog.password, username)
+  const invalid = validatePassword(createDialog.password, email)
   if (invalid) {
     createDialog.error = invalid
     return
@@ -91,10 +99,10 @@ async function submitCreate() {
     await request('/api/v1/admin/accounts', {
       method: 'POST',
       csrf: true,
-      body: { username, role: createDialog.role, password: createDialog.password },
+      body: { email, role: createDialog.role, password: createDialog.password },
     })
     createDialog.open = false
-    ElMessage.success(`账号 ${username} 已创建`)
+    ElMessage.success(`管理员 ${email} 已创建`)
     await load()
   } catch (cause) {
     createDialog.error = cause instanceof Error ? cause.message : '创建失败'
@@ -109,7 +117,7 @@ async function changeRole(raw: unknown, next: string) {
   if (next === previous) return
   try {
     await ElMessageBox.confirm(
-      `把 ${row.username} 的角色从「${roleLabels[previous]}」改为「${roleLabels[next]}」？` +
+      `把 ${row.email} 的角色从「${roleLabels[previous]}」改为「${roleLabels[next]}」？` +
       '\n该账号的登录会立即失效，需要重新登录。',
       '调整角色',
       { type: 'warning', confirmButtonText: '确认调整', cancelButtonText: '取消' },
@@ -138,8 +146,8 @@ async function toggleStatus(raw: unknown) {
   try {
     await ElMessageBox.confirm(
       next === 'disabled'
-        ? `停用 ${row.username}？该账号会立即退出登录且无法登录。`
-        : `启用 ${row.username}？启用后该账号可以正常登录。`,
+        ? `停用 ${row.email}？该账号会立即退出登录且无法登录。`
+        : `启用 ${row.email}？启用后该账号可以正常登录。`,
       next === 'disabled' ? '停用账号' : '启用账号',
       { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' },
     )
@@ -171,7 +179,7 @@ function openReset(raw: unknown) {
 async function submitReset() {
   const target = resetDialog.target
   if (!target) return
-  const invalid = validatePassword(resetDialog.password, target.username)
+  const invalid = validatePassword(resetDialog.password, target.email)
   if (invalid) {
     resetDialog.error = invalid
     return
@@ -183,7 +191,7 @@ async function submitReset() {
       method: 'POST', csrf: true, body: { password: resetDialog.password },
     })
     resetDialog.open = false
-    ElMessage.success(`${target.username} 的密码已重置，需要重新登录`)
+    ElMessage.success(`${target.email} 的密码已重置，需要重新登录`)
     await load()
   } catch (cause) {
     resetDialog.error = cause instanceof Error ? cause.message : '重置失败'
@@ -209,7 +217,7 @@ const isSelf = (raw: unknown) => (raw as AccountRow).id === session.value?.id
     <header class="head">
       <div>
         <h3>后台账号</h3>
-        <p>账号与前台用户体系分离；权限只在服务端判定，前端按钮显隐只是跟随。</p>
+        <p>账号用邮箱登录，与前台用户体系分离；权限只在服务端判定，前端按钮显隐只是跟随。</p>
       </div>
       <ElButton v-if="writable" type="primary" @click="openCreate">新建账号</ElButton>
     </header>
@@ -217,9 +225,9 @@ const isSelf = (raw: unknown) => (raw as AccountRow).id === session.value?.id
     <p v-if="error" class="error">{{ error }}</p>
 
     <ElTable v-loading="loading" :data="items" empty-text="暂无账号" size="small" row-key="id">
-      <ElTableColumn prop="username" label="账号" min-width="180">
+      <ElTableColumn prop="email" label="邮箱" min-width="220">
         <template #default="{ row }">
-          <span class="name">{{ row.username }}</span>
+          <span class="name">{{ row.email }}</span>
           <AdminStatusTag v-if="isSelf(row)" class="self-tag" text="当前登录" tone="neutral" />
         </template>
       </ElTableColumn>
@@ -278,10 +286,10 @@ const isSelf = (raw: unknown) => (raw as AccountRow).id === session.value?.id
 
     <ElDialog v-model="createDialog.open" title="新建后台账号" width="420px">
       <div class="form">
-        <label>账号</label>
+        <label>登录邮箱</label>
         <ElInput
-          v-model="createDialog.username" placeholder="小写字母开头，如 yj_editor"
-          maxlength="32" show-word-limit
+          v-model="createDialog.email" type="email" placeholder="如 editor@nightstreet.cn"
+          maxlength="254"
         />
         <label>角色</label>
         <ElSelect v-model="createDialog.role" class="full">
@@ -303,7 +311,7 @@ const isSelf = (raw: unknown) => (raw as AccountRow).id === session.value?.id
 
     <ElDialog v-model="resetDialog.open" title="重置密码" width="420px">
       <p class="hint">
-        为 <strong>{{ resetDialog.target?.username }}</strong> 设置新密码，
+        为 <strong>{{ resetDialog.target?.email }}</strong> 设置新密码，
         该账号的所有登录会立即失效。
       </p>
       <ElInput

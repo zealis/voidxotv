@@ -15,7 +15,7 @@ import (
 // AdminRecord 是账号的运维视角，永远不含任何口令材料。
 type AdminRecord struct {
 	ID        int64  `json:"id"`
-	Username  string `json:"username"`
+	Email     string `json:"email"`
 	Role      string `json:"role"`
 	Status    string `json:"status"`
 	CreatedAt string `json:"created_at"`
@@ -24,7 +24,7 @@ type AdminRecord struct {
 
 func (r *Repository) ListAdmins(ctx context.Context) ([]AdminRecord, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, username, role, status, created_at, updated_at
+		SELECT id, email, role, status, created_at, updated_at
 		FROM admin_users ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("admin: list admins: %w", err)
@@ -34,7 +34,7 @@ func (r *Repository) ListAdmins(ctx context.Context) ([]AdminRecord, error) {
 	for rows.Next() {
 		var item AdminRecord
 		var created, updated time.Time
-		if err := rows.Scan(&item.ID, &item.Username, &item.Role, &item.Status,
+		if err := rows.Scan(&item.ID, &item.Email, &item.Role, &item.Status,
 			&created, &updated); err != nil {
 			return nil, err
 		}
@@ -49,9 +49,9 @@ func (r *Repository) ListAdmins(ctx context.Context) ([]AdminRecord, error) {
 func (r *Repository) FindAdminByID(ctx context.Context, id int64) (AdminAccount, error) {
 	var account AdminAccount
 	err := r.db.QueryRow(ctx, `
-		SELECT id, username, password_hash, role, status
+		SELECT id, email, password_hash, role, status
 		FROM admin_users WHERE id = $1`, id).Scan(
-		&account.ID, &account.Username, &account.PasswordHash, &account.Role, &account.Status)
+		&account.ID, &account.Email, &account.PasswordHash, &account.Role, &account.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return account, ErrNotFound
 	}
@@ -61,18 +61,18 @@ func (r *Repository) FindAdminByID(ctx context.Context, id int64) (AdminAccount,
 	return account, nil
 }
 
-func (r *Repository) CreateAdmin(ctx context.Context, username, role, passwordHash string) (AdminRecord, error) {
+func (r *Repository) CreateAdmin(ctx context.Context, email, role, passwordHash string) (AdminRecord, error) {
 	var item AdminRecord
 	var created, updated time.Time
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO admin_users (username, password_hash, role, status, created_at, updated_at)
+		INSERT INTO admin_users (email, password_hash, role, status, created_at, updated_at)
 		VALUES ($1, $2, $3, 'active', now(), now())
-		RETURNING id, username, role, status, created_at, updated_at`,
-		username, passwordHash, role).Scan(
-		&item.ID, &item.Username, &item.Role, &item.Status, &created, &updated)
+		RETURNING id, email, role, status, created_at, updated_at`,
+		email, passwordHash, role).Scan(
+		&item.ID, &item.Email, &item.Role, &item.Status, &created, &updated)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		return item, fmt.Errorf("%w: 账号已存在", ErrConflict)
+		return item, fmt.Errorf("%w: 该邮箱已存在", ErrConflict)
 	}
 	if err != nil {
 		return item, fmt.Errorf("admin: create admin: %w", err)

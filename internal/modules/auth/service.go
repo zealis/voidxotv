@@ -31,6 +31,12 @@ func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
+// ValidEmail 判断邮箱是否可用于登录标识（长度上限 254 + 基础格式）。
+// 前台注册与后台建号共用一套规则，避免两边校验口径不一致。
+func ValidEmail(email string) bool {
+	return len(email) > 0 && len(email) <= 254 && emailPattern.MatchString(email)
+}
+
 // Service implements registration, login, authentication and logout.
 type Service struct {
 	repo      *Repository
@@ -59,7 +65,7 @@ type RegisterInput struct {
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (User, error) {
 	email := NormalizeEmail(input.Email)
-	if len(email) == 0 || len(email) > 254 || !emailPattern.MatchString(email) {
+	if !ValidEmail(email) {
 		return User{}, ErrInvalidEmail
 	}
 	if utf8.RuneCountInString(input.Password) < 8 {

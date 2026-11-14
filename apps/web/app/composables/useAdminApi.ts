@@ -2,7 +2,8 @@
 // 浏览器从不直接持有 Go API 地址；CSRF 头由会话中的 token 自动补齐。
 export interface AdminSession {
   id: number
-  username: string
+  /** 后台登录标识：2026-11 起只认邮箱，与前台账号同一口径。 */
+  email: string
   role: string
   permissions: string[]
   csrf_token: string
@@ -125,7 +126,7 @@ export interface AdminImportJob {
 export interface AdminAuditEntry {
   id: number
   admin_id: number
-  username: string
+  admin_email: string
   role: string
   action: string
   object_type: string
@@ -172,10 +173,10 @@ export function useAdminApi() {
     }
   }
 
-  async function login(username: string, password: string, totpCode?: string): Promise<void> {
+  async function login(email: string, password: string, totpCode?: string): Promise<void> {
     const result = await request<AdminSession>('/api/v1/admin/auth/login', {
       method: 'POST',
-      body: { username, password, totp_code: totpCode || undefined },
+      body: { email, password, totp_code: totpCode || undefined },
     })
     session.value = result
   }

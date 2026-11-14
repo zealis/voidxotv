@@ -55,11 +55,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// 后台登录用邮箱（0.17.0 起没有用户名）：开发号统一 yj_<role>@admin.local，
+	// 与迁移 000017 给存量账号补的占位邮箱同一规则。
 	for _, role := range []string{"super_admin", "reviewer", "operator", "readonly"} {
+		email := "yj_" + role + "@admin.local"
 		if _, err := db.Exec(ctx, `
-			INSERT INTO admin_users (username, password_hash, role, status)
+			INSERT INTO admin_users (email, password_hash, role, status)
 			VALUES ($1, $2, $3, 'active')
-			ON CONFLICT (username) DO NOTHING`, "yj_"+role, hash, role); err != nil {
+			ON CONFLICT DO NOTHING`, email, hash, role); err != nil {
 			return fmt.Errorf("seed: admin account %s: %w", role, err)
 		}
 	}

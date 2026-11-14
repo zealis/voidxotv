@@ -3,7 +3,6 @@ package admin
 import (
 	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -13,6 +12,7 @@ import (
 )
 
 // 后台账号与口令（§4.7 / §11.5）：账号体系与前台用户完全分离，
+// 登录标识与前台同一口径——只认邮箱，不再有「用户名」。
 // 口令只以 Argon2id 哈希落库，任何接口都不回传口令材料。
 
 const (
@@ -21,9 +21,8 @@ const (
 )
 
 var (
-	adminUsernamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{2,31}$`)
-	adminRoleSet         = []string{"super_admin", "reviewer", "operator", "readonly"}
-	adminStatusSet       = []string{"active", "disabled"}
+	adminRoleSet   = []string{"super_admin", "reviewer", "operator", "readonly"}
+	adminStatusSet = []string{"active", "disabled"}
 )
 
 func validRole(role string) bool {
@@ -45,7 +44,8 @@ func validStatus(status string) bool {
 }
 
 // validateAdminPassword 只做离线可校验的规则，强度策略由部署侧再叠加。
-func validateAdminPassword(password, username string) error {
+// 第二个参数是登录邮箱：邮箱本身与 @ 前面的本地部分都不许当密码（等同弱口令）。
+func validateAdminPassword(password, email string) error {
 	if utf8.RuneCountInString(password) < minAdminPassword {
 		return fmt.Errorf("%w: 密码至少 %d 位", ErrInvalidInput, minAdminPassword)
 	}
@@ -55,14 +55,18 @@ func validateAdminPassword(password, username string) error {
 	if strings.TrimSpace(password) != password {
 		return fmt.Errorf("%w: 密码首尾不能有空格", ErrInvalidInput)
 	}
-	if strings.EqualFold(password, username) {
-		return fmt.Errorf("%w: 密码不能与账号相同", ErrInvalidInput)
+	local := email
+	if at := strings.Index(email, "@"); at > 0 {
+		local = email[:at]
+	}
+	if strings.EqualFold(password, email) || strings.EqualFold(password, local) {
+		return fmt.Errorf("%w: 密码不能与登录邮箱相同", ErrInvalidInput)
 	}
 	return nil
 }
 
 type createAccountRequest struct {
-	Username string `json:"username"`
+	Email    string `json:"email"`
 	Role     string `json:"role"`
 	Password string `json:"password"`
 }
@@ -101,17 +105,16 @@ func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, ErrInvalidInput)
 		return
 	}
-	username := strings.ToLower(strings.TrimSpace(request.Username))
-	if !adminUsernamePattern.MatchString(username) {
-		h.writeError(w, r, fmt.Errorf(
-			"%w: 账号需 3–32 位小写字母/数字/下划线，且以字母开头", ErrInvalidInput))
+	email := auth.NormalizeEmail(request.Email)
+	if !auth.ValidEmail(email) {
+		h.writeError(w, r, fmt.Errorf("%w: 邮箱格式不正确", ErrInvalidInput))
 		return
 	}
 	if !validRole(request.Role) {
 		h.writeError(w, r, fmt.Errorf("%w: 角色不合法", ErrInvalidInput))
 		return
 	}
-	if err := validateAdminPassword(request.Password, username); err != nil {
+	if err := validateAdminPassword(request.Password, email); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
@@ -120,13 +123,13 @@ func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	item, err := h.repo.CreateAdmin(r.Context(), username, request.Role, hash)
+	item, err := h.repo.CreateAdmin(r.Context(), email, request.Role, hash)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
 	}
 	h.audit(r, "admin.create", "admin", item.ID, nil, map[string]any{
-		"username": item.Username, "role": item.Role,
+		"email": item.Email, "role": item.Role,
 	})
 	httpserver.JSON(w, http.StatusCreated, item)
 }
@@ -185,7 +188,7 @@ func (h *Handler) setAccountRole(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "admin.role", "admin", id, map[string]any{"role": target.Role},
 		map[string]any{"role": request.Role, "revoked_sessions": revoked})
 	httpserver.JSON(w, http.StatusOK, map[string]any{
-		"id": id, "username": target.Username, "role": request.Role,
+		"id": id, "email": target.Email, "role": request.Role,
 		"revoked_sessions": revoked,
 	})
 }
@@ -243,7 +246,7 @@ func (h *Handler) setAccountStatus(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "admin.status", "admin", id, map[string]any{"status": target.Status},
 		map[string]any{"status": request.Status, "revoked_sessions": revoked})
 	httpserver.JSON(w, http.StatusOK, map[string]any{
-		"id": id, "username": target.Username, "status": request.Status,
+		"id": id, "email": target.Email, "status": request.Status,
 		"revoked_sessions": revoked,
 	})
 }
@@ -264,7 +267,7 @@ func (h *Handler) resetAccountPassword(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	if err := validateAdminPassword(request.Password, target.Username); err != nil {
+	if err := validateAdminPassword(request.Password, target.Email); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
@@ -286,7 +289,7 @@ func (h *Handler) resetAccountPassword(w http.ResponseWriter, r *http.Request) {
 		"revoked_sessions": revoked,
 	})
 	httpserver.JSON(w, http.StatusOK, map[string]any{
-		"id": id, "username": target.Username, "reset": true, "revoked_sessions": revoked,
+		"id": id, "email": target.Email, "reset": true, "revoked_sessions": revoked,
 	})
 }
 
@@ -314,7 +317,7 @@ func (h *Handler) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 			"当前密码不正确", httpserver.RequestIDFromContext(r.Context()))
 		return
 	}
-	if err := validateAdminPassword(request.NewPassword, account.Username); err != nil {
+	if err := validateAdminPassword(request.NewPassword, account.Email); err != nil {
 		h.writeError(w, r, err)
 		return
 	}

@@ -39,6 +39,37 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.17.0] - 2026-11-13
+
+### 新增
+
+- 后台账号改为「邮箱 + 密码」登录，取消用户名（与前台账号同一口径）。**不兼容**：
+  - 迁移 `000017_admin_email`：`admin_users` 新增 `email TEXT NOT NULL`、删除 `username`
+    （用户名与邮箱不是一一对应，无法无损还原，**不可逆**，回滚脚本只能按 `a_<id>` 重新生成用户名）；
+    唯一索引建在 `lower(email)` 上，避免 `Admin@x.com` 与 `admin@x.com` 各占一行。
+    存量 4 个 seed 账号补占位邮箱 `yj_<role>@admin.local`，否则丢掉用户名后会永久锁死。
+  - `POST /api/v1/admin/auth/login` 请求体 `username` → `email`（旧字段会因未知字段直接 400）；
+    登录查询走 `auth.NormalizeEmail` + `lower(email)`，大小写不敏感。
+  - `POST /api/v1/admin/accounts` 建号改收 `email`，格式校验复用新增的 `auth.ValidEmail`
+    （此前 admin 包自带一套 `^[a-z][a-z0-9_]{2,31}$` 规则，与前台不一致，已删除）。
+  - `GET /api/v1/admin/accounts` 等接口的 `username` 字段统一改为 `email`；
+    审计列表 `admin_audit_logs` 关联出的 `username` 改为 `admin_email`。
+- 会话与身份：`sessionRecord` / `Principal` / TOTP 的 `account name` 都改用邮箱，
+  后台顶栏、改密对话框显示的也是邮箱。**升级后旧后台会话里的身份字段为空，需要重新登录一次**。
+- `cmd/seed`：开发用后台账号改为 `yj_<role>@admin.local`，`ON CONFLICT DO NOTHING`
+  不再绑定 `username` 列。
+
+### 修复
+
+- 后台密码强度校验原来只挡住「密码 = 用户名」，换成邮箱后把**邮箱本身**和 `@` 前面的
+  **本地部分**都纳入比较，避免 `ops@x.com` / `ops` 直接当密码（服务端与前端同规则）。
+
+### 改进
+
+- 后台 UI 全部换字段：登录页「管理员账号」→「管理员邮箱」（`type="email"`、`autocomplete="username"`）、
+  账号管理列表列名「账号」→「邮箱」、建号弹窗「登录邮箱」、重置密码与启用/停用确认文案、
+  审计日志列「管理员」→「管理员邮箱」、建号成功提示改为「管理员 <邮箱> 已创建」。
+
 ## [0.16.2] - 2026-11-13
 
 ### 改进

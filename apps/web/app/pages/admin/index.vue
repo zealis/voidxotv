@@ -109,9 +109,9 @@ onBeforeUnmount(() => {
 
       <div class="nav-footer">
         <div class="admin-card">
-          <span class="avatar">{{ session.username.slice(0, 1).toUpperCase() }}</span>
+          <span class="avatar">{{ session.email.slice(0, 1).toUpperCase() }}</span>
           <div class="admin-meta">
-            <strong>{{ session.username }}</strong>
+            <strong>{{ session.email }}</strong>
             <span>{{ roleLabels[session.role] || session.role }}</span>
           </div>
         </div>
