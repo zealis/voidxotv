@@ -39,6 +39,20 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.23.4] - 2026-11-14
+
+### 改进
+
+- **播放控制条 · 弹幕三颗图标统一换成设计稿字形**：`apps/web/app/components/immersive/ImmersiveItem.vue`
+  的弹幕开关两态与「弹幕设置」按钮改用同一套 1024 格 SVG——开「气泡 + 圆形对勾」、
+  关「气泡 + 圆形斜杠」、设置「气泡 + 六边形螺母」；`fill` 统一 `currentColor`，
+  开态仍由 `.pb-word.on` 染品牌粉，关态与设置保持次级文字色。
+  - 三颗图标共用 `.pb-danmaku`，尺寸统一 18×18 居中，不再各写一条 CSS；
+    删掉旧 24 格自制字形与 `fill-opacity` / `fill-rule` / `clip-rule` 属性。
+  - `aria-pressed` / `aria-label` / `title` 与两态切换逻辑保持不变。
+  - `.tools/headless-test/m69-danmaku-icons.js` 新增三图标一致性回归；
+    `m67` / `m68` 断言同步到 1024 格口径。
+
 ## [0.23.3] - 2026-11-14
 
 ### 改进
