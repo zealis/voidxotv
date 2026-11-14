@@ -39,6 +39,34 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.19.0] - 2026-11-14
+
+### 新增
+
+- GIF 图源补上 **KLIPY**（参考插件里的「线路一」）：后台「功能开关 → GIF 表情包 → 图源」
+  现在有「关闭 / API 盒子 / KLIPY」三选一。
+- 两条线路的走法不同，代码里按图源分流：
+  - **API 盒子**：本站代理（`/api/v1/gifs/search`），id/key 只在服务端；结果落库缓存省配额。
+  - **KLIPY**：浏览器直连 `api.klipy.com`。它的条款要求请求由终端发起、不得经服务端转发或缓存，
+    所以 `app_key` 由新增的 `GET /api/v1/gifs/config` 下发给前端（它本身就是客户端密钥），
+    结果缓存只写访客自己的 `localStorage`（默认 1 天，可关）。
+- KLIPY 配置项：App Key、内容分级 `content_filter`（off/low/medium/high）、国家/地区（ISO 两位，
+  留空则不带）、每页条数（8–50）、浏览器缓存天数（0–90）。
+- KLIPY 集成要求的两条都在：搜索框占位固定 `Search KLIPY`（必需），面板底部 `Powered by KLIPY`。
+- `gifs.Config` 增加 `klipy_*` 五个键（迁移 `000019_gif_klipy`）；
+  `Ready()` 按当前图源各自的密钥判断，后台保存时对应图源没填密钥会被拦下。
+
+### 安全维护
+
+- CSP 显式放行 KLIPY：`connect-src` 加 `https://api.klipy.com`，`img-src` 加 `https://*.klipy.com`。
+  没有依赖 `YJ_MEDIA_ORIGINS` 里那个 `https:` 兜底——生产可能把媒体源收敛成自有 CDN。
+- `/api/v1/gifs/config` 只下发前端发起请求所需的最小信息：KLIPY 的 key + 参数，
+  apihz 只给条数，**id/key 永不出现在这个接口里**。服务端 `/search` 对 KLIPY 直接 400
+  （`gif_client_side`），杜绝「绕过条款用服务端代理」这条路径。
+- 服务端响应解析改为防御式：先找第一个「像结果集」的数组（`data/results/gifs/stickers/items`），
+  再从每条里挖 https 图片地址（`file/media/preview/gif/webp/tinygif/hd/url`），
+  下一页判定同时认 `has_next`、`next_page` 和 Tenor 口径的 `next` 游标。
+
 ## [0.18.3] - 2026-11-14
 
 ### 改进

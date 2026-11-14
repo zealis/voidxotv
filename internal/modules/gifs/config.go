@@ -16,9 +16,12 @@ import (
 )
 
 // 图源开关：off 表示没配置，前端应提示「未配置」而不是给个空列表。
+// apihz 走服务端代理（密钥保密）；klipy 由浏览器直连（它的条款要求请求由终端发起、
+// app_key 本就对访客可见），所以配置接口会把 klipy 的 key 下发给前端，apihz 的永远不下发。
 const (
 	ProviderOff   = "off"
 	ProviderApihz = "apihz"
+	ProviderKlipy = "klipy"
 )
 
 // 评论正文里的 GIF 标记：[[gif:https://...]]。存文本而不是另开表，
@@ -40,10 +43,22 @@ type Config struct {
 	ApihzKey   string `json:"apihz_key"`
 	ApihzLimit int    `json:"apihz_limit"`
 	CacheDays  int    `json:"cache_days"`
+	// KLIPY：浏览器直连，这些值会随 /api/v1/gifs/config 下发到前端。
+	KlipyKey       string `json:"klipy_key"`
+	KlipyFilter    string `json:"klipy_filter"`
+	KlipyLocale    string `json:"klipy_locale"`
+	KlipyLimit     int    `json:"klipy_limit"`
+	KlipyCacheDays int    `json:"klipy_cache_days"`
 }
 
+// klipyFilters 是 KLIPY 文档里的内容分级档位，原样透传，不自造枚举。
+var klipyFilters = []string{"off", "low", "medium", "high"}
+
 func defaults() Config {
-	return Config{Provider: ProviderOff, ApihzLine: "cn", ApihzLimit: 20, CacheDays: 7}
+	return Config{
+		Provider: ProviderOff, ApihzLine: "cn", ApihzLimit: 20, CacheDays: 7,
+		KlipyFilter: "off", KlipyLocale: "cn", KlipyLimit: 24, KlipyCacheDays: 1,
+	}
 }
 
 // Normalize 把后台传进来的值收敛到合法范围：不信任表单，
@@ -53,6 +68,8 @@ func (c Config) Normalize() Config {
 	switch strings.TrimSpace(out.Provider) {
 	case ProviderApihz:
 		out.Provider = ProviderApihz
+	case ProviderKlipy:
+		out.Provider = ProviderKlipy
 	default:
 		out.Provider = ProviderOff
 	}
@@ -75,12 +92,51 @@ func (c Config) Normalize() Config {
 	if out.CacheDays > 90 {
 		out.CacheDays = 90
 	}
+	// KLIPY
+	out.KlipyKey = strings.TrimSpace(out.KlipyKey)
+	out.KlipyFilter = strings.TrimSpace(strings.ToLower(out.KlipyFilter))
+	validFilter := false
+	for _, item := range klipyFilters {
+		if out.KlipyFilter == item {
+			validFilter = true
+			break
+		}
+	}
+	if !validFilter {
+		out.KlipyFilter = "off"
+	}
+	// 国家码是 ISO 3166-1 两位；非法值直接清空（KLIPY 允许不带这个参数）。
+	out.KlipyLocale = strings.ToLower(strings.TrimSpace(out.KlipyLocale))
+	if len(out.KlipyLocale) != 2 {
+		out.KlipyLocale = ""
+	}
+	// 文档允许 8–50，其余按默认 24 处理。
+	if out.KlipyLimit < 8 {
+		out.KlipyLimit = 8
+	}
+	if out.KlipyLimit > 50 {
+		out.KlipyLimit = 50
+	}
+	// KLIPY 的缓存落在访客浏览器里（条款不允许服务端缓存），默认 1 天。
+	if out.KlipyCacheDays < 0 {
+		out.KlipyCacheDays = 0
+	}
+	if out.KlipyCacheDays > 90 {
+		out.KlipyCacheDays = 90
+	}
 	return out
 }
 
-// Ready 判断当前图源是否具备调用条件（选了 apihz 且 id/key 都填了）。
+// Ready 判断当前图源是否具备调用条件（图源对应的密钥填了）。
 func (c Config) Ready() bool {
-	return c.Provider == ProviderApihz && c.ApihzID != "" && c.ApihzKey != ""
+	switch c.Provider {
+	case ProviderApihz:
+		return c.ApihzID != "" && c.ApihzKey != ""
+	case ProviderKlipy:
+		return c.KlipyKey != ""
+	default:
+		return false
+	}
 }
 
 // UpstreamHost 是 apihz 的两条线路主机，白名单取值，不接受外部传入地址（防 SSRF）。
@@ -122,6 +178,20 @@ func LoadConfig(ctx context.Context, db *pgxpool.Pool) (Config, error) {
 			if parsed, err := strconv.Atoi(value); err == nil {
 				cfg.CacheDays = parsed
 			}
+		case "gif.klipy_key":
+			cfg.KlipyKey = value
+		case "gif.klipy_filter":
+			cfg.KlipyFilter = value
+		case "gif.klipy_locale":
+			cfg.KlipyLocale = value
+		case "gif.klipy_limit":
+			if parsed, err := strconv.Atoi(value); err == nil {
+				cfg.KlipyLimit = parsed
+			}
+		case "gif.klipy_cache_days":
+			if parsed, err := strconv.Atoi(value); err == nil {
+				cfg.KlipyCacheDays = parsed
+			}
 		}
 	}
 	return cfg.Normalize(), rows.Err()
@@ -137,6 +207,11 @@ func SaveConfig(ctx context.Context, db *pgxpool.Pool, adminID int64, cfg Config
 		{"gif.apihz_key", normalized.ApihzKey},
 		{"gif.apihz_limit", strconv.Itoa(normalized.ApihzLimit)},
 		{"gif.cache_days", strconv.Itoa(normalized.CacheDays)},
+		{"gif.klipy_key", normalized.KlipyKey},
+		{"gif.klipy_filter", normalized.KlipyFilter},
+		{"gif.klipy_locale", normalized.KlipyLocale},
+		{"gif.klipy_limit", strconv.Itoa(normalized.KlipyLimit)},
+		{"gif.klipy_cache_days", strconv.Itoa(normalized.KlipyCacheDays)},
 	}
 	for _, pair := range pairs {
 		if _, err := db.Exec(ctx, `

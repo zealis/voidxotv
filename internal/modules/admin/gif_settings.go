@@ -32,10 +32,14 @@ func (h *Handler) updateGifConfig(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	// 选了 API 盒子却不填凭据，存下去也只是个「看起来启用了」的空壳，不如当场拦下。
+	// 选了图源却不填凭据，存下去只是个「看起来启用了」的空壳，不如当场拦下。
 	if request.Provider == gifs.ProviderApihz &&
 		(request.ApihzID == "" || request.ApihzKey == "") {
 		h.writeError(w, r, fmt.Errorf("%w: 选择 API 盒子需同时填写开发者 ID 与 KEY", ErrInvalidInput))
+		return
+	}
+	if request.Provider == gifs.ProviderKlipy && request.KlipyKey == "" {
+		h.writeError(w, r, fmt.Errorf("%w: 选择 KLIPY 需填写 App Key", ErrInvalidInput))
 		return
 	}
 	before, err := gifs.LoadConfig(r.Context(), h.repo.db)
@@ -52,10 +56,14 @@ func (h *Handler) updateGifConfig(w http.ResponseWriter, r *http.Request) {
 	// 审计只落非敏感字段：key 一旦进审计表就等于换了地方存明文。
 	h.audit(r, "settings.gif", "system_setting", "gif",
 		map[string]any{"provider": before.Provider, "line": before.ApihzLine,
-			"id": before.ApihzID, "limit": before.ApihzLimit, "cache_days": before.CacheDays},
+			"id": before.ApihzID, "limit": before.ApihzLimit, "cache_days": before.CacheDays,
+			"klipy_filter": before.KlipyFilter, "klipy_locale": before.KlipyLocale,
+			"klipy_limit": before.KlipyLimit, "klipy_cache_days": before.KlipyCacheDays},
 		map[string]any{"provider": saved.Provider, "line": saved.ApihzLine,
 			"id": saved.ApihzID, "limit": saved.ApihzLimit, "cache_days": saved.CacheDays,
-			"key_set": saved.ApihzKey != ""})
+			"klipy_filter": saved.KlipyFilter, "klipy_locale": saved.KlipyLocale,
+			"klipy_limit": saved.KlipyLimit, "klipy_cache_days": saved.KlipyCacheDays,
+			"apihz_key_set": saved.ApihzKey != "", "klipy_key_set": saved.KlipyKey != ""})
 	httpserver.JSON(w, http.StatusOK, map[string]any{
 		"config": saved, "ready": saved.Ready(),
 	})

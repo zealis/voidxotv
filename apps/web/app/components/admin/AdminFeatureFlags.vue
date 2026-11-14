@@ -10,6 +10,11 @@ interface GifConfig {
   apihz_key: string
   apihz_limit: number
   cache_days: number
+  klipy_key: string
+  klipy_filter: string
+  klipy_locale: string
+  klipy_limit: number
+  klipy_cache_days: number
 }
 
 const { request, can } = useAdminApi()
@@ -22,7 +27,16 @@ const ready = ref(false)
 const config = reactive<GifConfig>({
   provider: 'off', apihz_line: 'cn', apihz_id: '', apihz_key: '',
   apihz_limit: 20, cache_days: 7,
+  klipy_key: '', klipy_filter: 'off', klipy_locale: 'cn',
+  klipy_limit: 24, klipy_cache_days: 1,
 })
+
+const klipyFilters = [
+  { value: 'off', label: 'off（不按分级过滤，原样返回）' },
+  { value: 'low', label: 'low（只拦最高一档）' },
+  { value: 'medium', label: 'medium（再收紧一级）' },
+  { value: 'high', label: 'high（最严：只出适合全年龄的结果）' },
+]
 
 async function load() {
   loading.value = true
@@ -85,10 +99,19 @@ onMounted(load)
         <ElSelect v-model="config.provider" class="full" :disabled="!writable">
           <ElOption value="off" label="关闭（评论区隐藏 GIF 页）" />
           <ElOption value="apihz" label="API 盒子 · 表情包（国内可达，本站代理）" />
+          <ElOption value="klipy" label="KLIPY（浏览器直连，海外可用）" />
         </ElSelect>
         <p class="hint">
-          图源方在 <strong>API 盒子用户中心 → 个人资料</strong> 查看开发者 ID 与 KEY；
-          本站按「普通集群负载」线路调用，密钥只在服务端拼接。
+          <template v-if="config.provider === 'apihz'">
+            图源方在 <strong>API 盒子用户中心 → 个人资料</strong> 查看开发者 ID 与 KEY；
+            本站按「普通集群负载」线路调用，密钥只在服务端拼接。
+          </template>
+          <template v-else-if="config.provider === 'klipy'">
+            App Key 在 <strong>KLIPY Partner Panel</strong>（partner.klipy.com/api-keys）创建。
+            KLIPY 的条款要求请求由访客浏览器直接发起、不得经本站转发或缓存，所以这个 key
+            会出现在前端请求里（它本身就是客户端密钥）；结果缓存也只能落在访客自己的浏览器里。
+          </template>
+          <template v-else>两个图源二选一，内容不混排。</template>
         </p>
 
         <template v-if="config.provider === 'apihz'">
@@ -120,6 +143,38 @@ onMounted(load)
           <p class="hint">
             每次返回上限 20 条、关键词最长 10 个汉字（上游限制）。缓存按「线路 + 关键词 + 页码」存
             <code>gif_search_cache</code>，同一查询在缓存期内不再请求上游；填 0 表示每次都真调。
+          </p>
+        </template>
+
+        <template v-else-if="config.provider === 'klipy'">
+          <label>App Key</label>
+          <ElInput
+            v-model="config.klipy_key" type="password" show-password
+            placeholder="KLIPY 发放的 app_key" autocomplete="new-password" :disabled="!writable"
+          />
+
+          <label>内容分级（content_filter）</label>
+          <ElSelect v-model="config.klipy_filter" class="full" :disabled="!writable">
+            <ElOption v-for="item in klipyFilters" :key="item.value" :value="item.value" :label="item.label" />
+          </ElSelect>
+
+          <div class="two">
+            <div>
+              <label>国家 / 地区</label>
+              <ElInput v-model="config.klipy_locale" placeholder="cn / us / jp" maxlength="2" :disabled="!writable" />
+            </div>
+            <div>
+              <label>每页条数</label>
+              <ElInput v-model.number="config.klipy_limit" type="number" :min="8" :max="50" :disabled="!writable" />
+            </div>
+          </div>
+
+          <label>浏览器缓存天数</label>
+          <ElInput v-model.number="config.klipy_cache_days" type="number" :min="0" :max="90" :disabled="!writable" />
+          <p class="hint">
+            KLIPY 不允许服务端缓存，这里控制的是<strong>访客浏览器</strong>的 localStorage：
+            同一关键词 + 同一页在天数内不重复请求。国家码是 ISO 3166-1 两位（cn / us / jp），留空则不带这个参数；
+            每页 8–50 条是他们的允许范围。填 0 = 不缓存。
           </p>
         </template>
 

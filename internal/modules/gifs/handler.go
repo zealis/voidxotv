@@ -68,6 +68,32 @@ func NewHandler(db *pgxpool.Pool, authHandler *auth.Handler, client *redis.Clien
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// 搜索要拿本站密钥去敲上游，等于替所有访客买单，所以必须登录并按人限流。
 	mux.Handle("GET /api/v1/gifs/search", h.auth.RequireAuth(http.HandlerFunc(h.search)))
+	// 图源配置：KLIPY 那条线由浏览器直连，需要把 app_key 交给前端（它的设计如此）；
+	// apihz 的 id/key 永远不出现在这里。
+	mux.Handle("GET /api/v1/gifs/config", h.auth.RequireAuth(http.HandlerFunc(h.publicConfig)))
+}
+
+// publicConfig 只下发前端发起请求所需的最小信息。
+// ⚠️ 新增图源字段时先想清楚这一条：这里返回的内容等于「全网可见」。
+func (h *Handler) publicConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := LoadConfig(r.Context(), h.db)
+	if err != nil {
+		h.log.Error("gifs: load config", "error", err)
+		h.fail(w, r, http.StatusInternalServerError, "internal_error", "表情包服务不可用")
+		return
+	}
+	payload := map[string]any{"provider": cfg.Provider, "ready": cfg.Ready()}
+	if cfg.Provider == ProviderKlipy {
+		payload["klipy"] = map[string]any{
+			"key": cfg.KlipyKey, "filter": cfg.KlipyFilter, "locale": cfg.KlipyLocale,
+			"limit": cfg.KlipyLimit, "cache_days": cfg.KlipyCacheDays,
+		}
+	}
+	if cfg.Provider == ProviderApihz {
+		// 只给条数：id/key 是密钥，任何情况下都不下发。
+		payload["apihz"] = map[string]any{"limit": cfg.ApihzLimit}
+	}
+	httpserver.JSON(w, http.StatusOK, payload)
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, status int, code, message string) {
@@ -103,6 +129,11 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	if !cfg.Ready() {
 		// 明确区别于「没有结果」：管理员没配密钥时前端要提示去后台填。
 		h.fail(w, r, http.StatusBadRequest, "gif_not_configured", "表情包源尚未配置")
+		return
+	}
+	if cfg.Provider == ProviderKlipy {
+		// KLIPY 的条款要求请求由终端发起、不得经服务器转发，所以这里不代理它。
+		h.fail(w, r, http.StatusBadRequest, "gif_client_side", "当前图源需由浏览器直连")
 		return
 	}
 	query := []rune(strings.TrimSpace(r.URL.Query().Get("q")))
