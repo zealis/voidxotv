@@ -4,7 +4,7 @@ import {
 } from 'element-plus'
 import type { AdminUserRow } from '~/composables/useAdminApi'
 
-const { request, can } = useAdminApi()
+const { request } = useAdminApi()
 const loading = ref(true)
 const error = ref('')
 const keyword = ref('')
@@ -76,6 +76,11 @@ async function load() {
 
 onMounted(load)
 
+// Element Plus 表格插槽给的 scope.row 是宽松的 DefaultRow，传给子组件前收窄成业务类型。
+function asUser(raw: unknown): AdminUserRow {
+  return raw as AdminUserRow
+}
+
 function openDialog(raw: unknown, action: typeof dialog.action) {
   const user = raw as AdminUserRow
   dialog.open = true
@@ -134,63 +139,79 @@ const statusMeta: Record<string, { text: string; tone: Tone }> = {
     </div>
     <ElEmpty v-else-if="!loading && !items.length" description="没有匹配的用户" :image-size="96" />
 
-    <ElTable v-else v-loading="loading" :data="items" size="default" class="user-table">
-      <ElTableColumn label="账号" min-width="160">
-        <template #default="scope">
-          <div class="handle">@{{ scope.row.handle }}</div>
-          <div class="sub">ID {{ scope.row.id }}</div>
-        </template>
-      </ElTableColumn>
-      <ElTableColumn label="角色" width="100">
-        <template #default="scope">
-          <AdminStatusTag
-            :text="scope.row.role === 'creator' ? '创作者' : '用户'"
-            :tone="scope.row.role === 'creator' ? 'positive' : 'neutral'"
-          />
-        </template>
-      </ElTableColumn>
-      <ElTableColumn label="状态" width="90">
-        <template #default="scope">
-          <AdminStatusTag
-            :text="statusMeta[scope.row.status]?.text || scope.row.status"
-            :tone="statusMeta[scope.row.status]?.tone"
-          />
-        </template>
-      </ElTableColumn>
-      <ElTableColumn prop="content_count" label="作品" width="72" />
-      <ElTableColumn label="最近处置" width="110">
-        <template #default="scope">
-          {{ scope.row.last_sanction ? (actionLabels[scope.row.last_sanction] || scope.row.last_sanction) : '—' }}
-        </template>
-      </ElTableColumn>
-      <ElTableColumn label="注册时间" width="160">
-        <template #default="scope">{{ new Date(scope.row.created_at).toLocaleDateString('zh-CN') }}</template>
-      </ElTableColumn>
-      <ElTableColumn label="操作" min-width="230" fixed="right">
-        <template #default="scope">
-          <div v-if="can('users:sanction')" class="row-actions">
-            <ElButton size="small" plain @click="openDialog(scope.row, 'warn')">警告</ElButton>
-            <ElButton size="small" plain @click="openDialog(scope.row, 'mute')">禁言</ElButton>
-            <ElButton size="small" type="danger" plain @click="openDialog(scope.row, 'ban')">封禁</ElButton>
-            <ElButton
-              v-if="scope.row.status !== 'active'" size="small" plain
-              @click="openDialog(scope.row, 'unban')"
-            >解封</ElButton>
-            <!-- 认证与取消认证成对出现：已认证的创作者也要有下行路径，别让按钮凭空消失。 -->
-            <ElButton
-              v-if="scope.row.role !== 'creator'" size="small" plain type="primary"
-              @click="openDialog(scope.row, 'verify_creator')"
-            >认证</ElButton>
-            <ElButton
-              v-else size="small" plain
-              @click="openDialog(scope.row, 'unverify_creator')"
-            >取消认证</ElButton>
-            <ElButton size="small" plain @click="openAvatarDialog(scope.row)">头像</ElButton>
-          </div>
-          <span v-else class="sub">只读角色</span>
-        </template>
-      </ElTableColumn>
+    <template v-else>
+      <ElTable v-loading="loading" :data="items" size="default" class="user-table">
+        <ElTableColumn label="账号" min-width="140">
+          <template #default="scope">
+            <div class="handle">@{{ scope.row.handle }}</div>
+            <div class="sub">ID {{ scope.row.id }}</div>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="角色" width="84">
+          <template #default="scope">
+            <AdminStatusTag
+              :text="scope.row.role === 'creator' ? '创作者' : '用户'"
+              :tone="scope.row.role === 'creator' ? 'positive' : 'neutral'"
+            />
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="状态" width="80">
+          <template #default="scope">
+            <AdminStatusTag
+              :text="statusMeta[scope.row.status]?.text || scope.row.status"
+              :tone="statusMeta[scope.row.status]?.tone"
+            />
+          </template>
+        </ElTableColumn>
+        <ElTableColumn prop="content_count" label="作品" width="56" />
+        <ElTableColumn label="最近处置" width="100">
+          <template #default="scope">
+            {{ scope.row.last_sanction ? (actionLabels[scope.row.last_sanction] || scope.row.last_sanction) : '—' }}
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="注册时间" width="112">
+          <template #default="scope">{{ new Date(scope.row.created_at).toLocaleDateString('zh-CN') }}</template>
+        </ElTableColumn>
+        <ElTableColumn label="操作" min-width="296" fixed="right">
+          <template #default="scope">
+            <AdminUserActions
+              :row="asUser(scope.row)" @sanction="openDialog" @avatar="openAvatarDialog"
+            />
+          </template>
+        </ElTableColumn>
     </ElTable>
+
+    <!-- 窄屏走卡片：表格有 7 列 + 右侧固定列，挤到 390px 会互相压字。 -->
+    <div v-loading="loading" class="user-cards">
+      <article v-for="row in items" :key="row.id" class="user-card">
+        <header class="card-head">
+          <div>
+            <div class="handle">@{{ row.handle }}</div>
+            <div class="sub">ID {{ row.id }}</div>
+          </div>
+          <div class="card-tags">
+            <AdminStatusTag
+              :text="row.role === 'creator' ? '创作者' : '用户'"
+              :tone="row.role === 'creator' ? 'positive' : 'neutral'"
+            />
+            <AdminStatusTag
+              :text="statusMeta[row.status]?.text || row.status"
+              :tone="statusMeta[row.status]?.tone"
+            />
+          </div>
+        </header>
+        <dl class="card-meta">
+          <div><dt>作品</dt><dd>{{ row.content_count }}</dd></div>
+          <div>
+            <dt>最近处置</dt>
+            <dd>{{ row.last_sanction ? (actionLabels[row.last_sanction] || row.last_sanction) : '—' }}</dd>
+          </div>
+          <div><dt>注册</dt><dd>{{ new Date(row.created_at).toLocaleDateString('zh-CN') }}</dd></div>
+        </dl>
+        <AdminUserActions :row="row" @sanction="openDialog" @avatar="openAvatarDialog" />
+      </article>
+    </div>
+    </template>
 
     <ElDialog
       v-model="avatarDialog.open"
@@ -236,11 +257,30 @@ const statusMeta: Record<string, { text: string; tone: Tone }> = {
 .user-table { --el-table-bg-color: transparent; --el-table-tr-bg-color: transparent; }
 .handle { font-size: 13px; font-weight: 600; color: #f4f4f5; }
 .sub { font-size: 11px; color: #8b8b93; }
-.row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-/* Element Plus 给相邻按钮加 margin-left:12px，它和 gap 叠加后换行不会归零，
-   窄屏下第二行开头（例如「头像」）会比第一行的「警告」右移 12px。
-   间距统一交给 gap，按钮自身不再保留左边距。 */
-.row-actions :deep(.el-button + .el-button) { margin-left: 0; }
+/* 窄屏卡片列表：默认隐藏，≤860px 与同名断点一起接管（对齐后台外框的折叠点）。 */
+.user-cards { display: none; }
+.user-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.card-tags { display: flex; flex: none; gap: 6px; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; }
+.card-meta > div { display: flex; align-items: baseline; gap: 6px; }
+.card-meta dt { font-size: 11px; color: #8b8b93; }
+.card-meta dd { margin: 0; font-size: 12px; color: #d4d4d8; }
 .dialog-tip { margin: 0 0 12px; font-size: 12px; line-height: 1.7; color: #a1a1aa; }
 .dialog-error { margin: 8px 0 0; font-size: 12px; color: #fb7185; }
+
+/* 表格 7 列最小宽度合计约 868px：加上侧栏 220 与主区内边距，窗口窄到这个尺寸以下
+   就会横向滚动，右侧固定列随即压住「最近处置 / 注册时间」。所以 1160 起才用表格，
+   更窄一律卡片——卡片不依赖列宽，任何宽度都能读。 */
+@media (max-width: 1160px) {
+  .user-table { display: none; }
+  .user-cards { display: grid; gap: 10px; }
+}
 </style>

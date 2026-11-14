@@ -253,6 +253,11 @@ html.dark {
   --el-border-color-lighter: rgba(255, 255, 255, 0.07);
   --el-mask-color: rgba(0, 0, 0, 0.72);
 }
+/* 弹窗宽度是各组件写死的 400/440/520px，手机上会顶出屏幕右缘；
+   统一压一个上限，等宽布局里就不用每个弹窗各自算 rem。 */
+html.dark .el-dialog {
+  max-width: calc(100vw - 32px);
+}
 html.dark .el-input__wrapper,
 html.dark .el-textarea__inner {
   background-color: #17171b;
