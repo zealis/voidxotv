@@ -12,7 +12,7 @@ const items = ref<AdminUserRow[]>([])
 
 const dialog = reactive({
   open: false,
-  action: 'warn' as 'warn' | 'mute' | 'ban' | 'unban' | 'verify_creator',
+  action: 'warn' as 'warn' | 'mute' | 'ban' | 'unban' | 'verify_creator' | 'unverify_creator',
   user: null as AdminUserRow | null,
   reason: '',
   pending: false,
@@ -20,7 +20,8 @@ const dialog = reactive({
 })
 
 const actionLabels: Record<string, string> = {
-  warn: '警告', mute: '禁言', ban: '封禁', unban: '解封', verify_creator: '创作者认证',
+  warn: '警告', mute: '禁言', ban: '封禁', unban: '解封',
+  verify_creator: '创作者认证', unverify_creator: '取消认证',
 }
 
 // 从 6 张随机 DiceBear 头像里给指定用户挑一张（复用前台同一个候选组件与后端写入逻辑）。
@@ -175,10 +176,15 @@ const statusMeta: Record<string, { text: string; tone: Tone }> = {
               v-if="scope.row.status !== 'active'" size="small" plain
               @click="openDialog(scope.row, 'unban')"
             >解封</ElButton>
+            <!-- 认证与取消认证成对出现：已认证的创作者也要有下行路径，别让按钮凭空消失。 -->
             <ElButton
               v-if="scope.row.role !== 'creator'" size="small" plain type="primary"
               @click="openDialog(scope.row, 'verify_creator')"
             >认证</ElButton>
+            <ElButton
+              v-else size="small" plain
+              @click="openDialog(scope.row, 'unverify_creator')"
+            >取消认证</ElButton>
             <ElButton size="small" plain @click="openAvatarDialog(scope.row)">头像</ElButton>
           </div>
           <span v-else class="sub">只读角色</span>

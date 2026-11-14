@@ -66,7 +66,7 @@ func (r *Repository) SanctionUser(ctx context.Context, userID, adminID int64,
 		newStatus = "banned"
 	case "unban":
 		newStatus = "active"
-	case "verify_creator":
+	case "verify_creator", "unverify_creator":
 		newStatus = "active"
 	default:
 		return AdminUserRow{}, fmt.Errorf("%w: 未知处置动作", ErrInvalidInput)
@@ -85,14 +85,32 @@ func (r *Repository) SanctionUser(ctx context.Context, userID, adminID int64,
 		}
 		return AdminUserRow{}, err
 	}
-	if action == "verify_creator" {
+	// 认证与取消认证都改角色：创作者身份是角色位，不是状态位。
+	// 「取消」是运营日常动作（资质过期、主动申请退出），所以必须有对称的下行路径，
+	// 否则一旦授出就只能改库。
+	switch action {
+	case "verify_creator":
 		if _, err := tx.Exec(ctx, `UPDATE users SET role = 'creator' WHERE id = $1`, userID); err != nil {
 			return AdminUserRow{}, err
 		}
 		role = "creator"
-	} else if _, err := tx.Exec(ctx, `UPDATE users SET status = $2 WHERE id = $1`,
-		userID, newStatus); err != nil {
-		return AdminUserRow{}, err
+	case "unverify_creator":
+		if role == "admin" {
+			return AdminUserRow{}, fmt.Errorf("%w: 管理员不能通过创作者认证撤回降级", ErrInvalidInput)
+		}
+		if role != "creator" {
+			return AdminUserRow{}, fmt.Errorf("%w: 该用户不是创作者", ErrInvalidInput)
+		}
+		// 只退回到普通用户；已发布作品与粉丝关系都保留，不连带下架。
+		if _, err := tx.Exec(ctx, `UPDATE users SET role = 'user' WHERE id = $1`, userID); err != nil {
+			return AdminUserRow{}, err
+		}
+		role = "user"
+	default:
+		if _, err := tx.Exec(ctx, `UPDATE users SET status = $2 WHERE id = $1`,
+			userID, newStatus); err != nil {
+			return AdminUserRow{}, err
+		}
 	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO user_sanctions (user_id, admin_id, action, reason, notified)
@@ -100,7 +118,8 @@ func (r *Repository) SanctionUser(ctx context.Context, userID, adminID int64,
 		return AdminUserRow{}, err
 	}
 	title := map[string]string{"warn": "账号警告", "mute": "账号已被禁言",
-		"ban": "账号已被封禁", "unban": "账号已恢复", "verify_creator": "创作者认证通过"}[action]
+		"ban": "账号已被封禁", "unban": "账号已恢复", "verify_creator": "创作者认证通过",
+		"unverify_creator": "创作者认证已取消"}[action]
 	if _, err := notifications.Dispatch(ctx, tx, notifications.Message{
 		UserID:   userID,
 		Kind:     "account",
