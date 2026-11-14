@@ -39,6 +39,27 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.23.6] - 2026-11-14
+
+### 改进
+
+- **评论输入区 · 取消独立发送按钮，输入框占满一行**：`apps/web/app/components/immersive/CommentSheet.vue`
+  原来是「输入框 + @/表情按钮 + 44px 粉色圆形发送按钮」三段并排，输入框被挤窄。
+  现在删掉发送按钮，把 `input` 与 `@` / 表情两个图标一起包进 `.input-wrap` 一整条圆角长条，
+  图标内嵌右端；发送改由回车 / 软键盘「发送」键触发（`<form @submit.prevent="submit">`
+  保留，区内只剩一个 text input，隐式提交照常生效，`submit()` 对空输入仍直接返回）。
+  - 边框 / 圆角 / 底色 / 焦点态从 `input` 挪到 `.input-wrap`（`:focus-within`），
+    失败态改 `.composer.failed .input-wrap`；`input` 自身透明无边框，文字区不与图标重叠。
+  - 补 `input:focus-visible { box-shadow: none }`：`tokens.css` 的全局品牌粉焦点环
+    原本会画在直角 input 上，变成一个与外层胶囊不搭的矩形（像表单报错）；
+    焦点统一由 `.input-wrap` 的边框表达，与弹幕 / 搜索输入区同一口径。
+  - `.pickers` 仍保持 `position: relative`（窄屏 `static`），表情面板桌面右对齐 /
+    移动端铺满一行的定位不变；`.pick` 高度 42→40px 适配外壳内高。
+  - 删掉 `button[type="submit"]` 与 `.send-icon` 的全部样式。
+  - `.tools/headless-test/m66-send-icon.js` 退役（测的对象已移除），新增
+    `m71-composer-inline.js` 校验无发送按钮、输入区占满一行、图标内嵌、
+    回车提交通路（空输入不写库）、表情面板桌面 / 移动端定位。
+
 ## [0.23.5] - 2026-11-14
 
 ### 修复

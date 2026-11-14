@@ -469,37 +469,29 @@ function isMine(item: { user_id: number; id: number }): boolean {
           </button>
         </div>
         <div class="row">
-          <input
-            ref="input" v-model="draft" type="text" maxlength="200"
-            :placeholder="replyTo ? `回复 @${replyTo.name}…` : '说点什么…'"
-            aria-label="评论内容"
-          />
-          <!-- @ 提及与表情：入口先就位，功能下一轮再做，因此保持禁用并标注「即将上线」，
-               避免点了没反应被当成坏了。 -->
-          <div ref="emojiAnchor" class="pickers">
-            <button
-              type="button" class="pick" disabled
-              title="@ 提及即将上线" aria-label="@ 提及（即将上线）"
-            >
-              <ImIcon name="at" :size="21" />
-            </button>
-            <button
-              type="button" class="pick" :class="{ on: emojiOpen }"
-              :aria-expanded="emojiOpen" aria-label="表情" title="表情" @click="toggleEmoji"
-            >
-              <ImIcon name="face" :size="22" />
-            </button>
-            <EmojiPanel v-if="emojiOpen" @pick="insertEmoji" @pick-gif="onPickGif" />
+          <div class="input-wrap">
+            <input
+              ref="input" v-model="draft" type="text" maxlength="200"
+              :placeholder="replyTo ? `回复 @${replyTo.name}…` : '说点什么…'"
+              aria-label="评论内容"
+            />
+            <!-- @ 提及与表情内嵌在输入框右端；发送交给回车 / 软键盘「发送」键。 -->
+            <div ref="emojiAnchor" class="pickers">
+              <button
+                type="button" class="pick" disabled
+                title="@ 提及即将上线" aria-label="@ 提及（即将上线）"
+              >
+                <ImIcon name="at" :size="21" />
+              </button>
+              <button
+                type="button" class="pick" :class="{ on: emojiOpen }"
+                :aria-expanded="emojiOpen" aria-label="表情" title="表情" @click="toggleEmoji"
+              >
+                <ImIcon name="face" :size="22" />
+              </button>
+              <EmojiPanel v-if="emojiOpen" @pick="insertEmoji" @pick-gif="onPickGif" />
+            </div>
           </div>
-          <button type="submit" :disabled="(!draft.trim() && !pendingGif) || posting" aria-label="发送评论">
-            <!-- 纸飞机：24 格单路径，画在品牌色圆钮上用纯白填充 -->
-            <svg class="send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path
-                fill="#ffffff"
-                d="m3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12L2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91"
-              />
-            </svg>
-          </button>
         </div>
         <p v-if="postFailed" class="failed-hint" role="status">发送失败，草稿已保留，可重试。</p>
       </form>
@@ -624,7 +616,7 @@ function isMine(item: { user_id: number; id: number }): boolean {
   background: var(--vp-im-surface);
 }
 .composer .row { display: flex; gap: 8px; }
-.composer.failed input { border-color: #ff6b5e; }
+.composer.failed .input-wrap { border-color: #ff6b5e; }
 .failed-hint { margin: 6px 0 0; font-size: 11px; color: #ff6b5e; }
 .reply-chip {
   display: inline-flex;
@@ -648,33 +640,34 @@ function isMine(item: { user_id: number; id: number }): boolean {
   color: var(--vp-im-text-primary);
   cursor: pointer;
 }
-.composer input {
-  flex: 1;
+/* 一整条圆角输入区占满一行，@ / 表情内嵌在右端，不再有独立发送按钮。
+   边框与底色挂在外壳上，input 自身透明，文字与图标才不会抢同一层。 */
+.composer .input-wrap {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
   min-width: 0;
-  height: 42px;
-  padding: 0 14px;
+  box-sizing: border-box;
+  padding: 0 6px 0 14px;
   border: 1px solid var(--vp-im-border);
   border-radius: 999px;
   background: var(--vp-im-surface-raised);
+}
+.composer .input-wrap:focus-within { border-color: var(--vp-im-accent); }
+.composer input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--vp-im-text-primary);
   font-size: 13px;
   outline: none;
 }
-.composer input:focus { border-color: var(--vp-im-accent); }
-.composer button[type="submit"] {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--vp-im-accent);
-  color: var(--vp-im-on-accent);
-  cursor: pointer;
-}
-.composer button[type="submit"]:disabled { opacity: 0.45; cursor: not-allowed; }
-/* 图标 18px：与原先 ImIcon 的显示尺寸一致，圆钮内两侧留白才是匀的。 */
-.composer .send-icon { width: 18px; height: 18px; display: block; }
+/* 全局 :focus-visible 会给 input 画一圈品牌粉 box-shadow；input 现在直角无边框，
+   那圈环会变成与外层胶囊不搭的矩形，像表单报错。焦点交给 .input-wrap 的边框表达。 */
+.composer input:focus-visible { box-shadow: none; }
 /* 表情面板以这里为定位锚点（面板向右对齐、浮在输入区上方）。
    窄屏时改成 static，让面板去以整条 .composer 为基准铺满一行，见 EmojiPanel。 */
 .composer .pickers {
@@ -691,7 +684,7 @@ function isMine(item: { user_id: number; id: number }): boolean {
   place-items: center;
   flex: 0 0 auto;
   width: 32px;
-  height: 42px;
+  height: 40px;
   padding: 0;
   border: 0;
   border-radius: 8px;
