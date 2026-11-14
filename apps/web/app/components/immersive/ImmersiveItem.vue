@@ -372,10 +372,29 @@ function onSeek(event: MouseEvent) {
         </span>
 
         <button
-          type="button" class="pb-word" :class="{ on: danmakuOn }"
-          :aria-pressed="danmakuOn" aria-label="弹幕开关" @click="toggleDanmaku"
+          type="button" class="pb-word pb-icon" :class="{ on: danmakuOn }"
+          :aria-pressed="danmakuOn" aria-label="弹幕开关"
+          :title="danmakuOn ? '关闭弹幕' : '打开弹幕'" @click="toggleDanmaku"
         >
-          弹<span v-if="danmakuOn" class="pb-dot" />
+          <!-- 开：气泡 + 勾（.pb-word.on 把 currentColor 变成品牌粉）；关：气泡 + 斜杠 -->
+          <svg
+            v-if="danmakuOn" class="danmaku-toggle"
+            viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+          >
+            <path
+              fill="currentColor"
+              d="M5 8a1 1 0 0 0 0 2zm2 2a1 1 0 0 0 0-2zm4-2a1 1 0 1 0 0 2zm8 2a1 1 0 1 0 0-2zM3 12a1 1 0 1 0 0 2zm6 2a1 1 0 1 0 0-2zm4.921.605a1 1 0 0 0-1.414 1.414l.707-.707zm1.765 3.179l-.707.707a1 1 0 0 0 1.414 0zm5.303-3.89a1 1 0 0 0-1.414-1.413l.707.707zM7.4 19.7l.6.8zM5 4v1h13V3H5zm2 15.5h1v-2H6v2zM6.5 17v-1H5v2h1.5zm4.5 0l-.6-.8l-3.6 2.7l.6.8l.6.8l3.6-2.7zM3 7h1V6H2v1zm0 8h1v-1.99H2V15zm17-9h-1v1h2V6zM5 9v1h2V8H5zm6 0v1h8V8h-8zm-8 4v1h6v-2H3zm10.214 2.312l-.707.707l2.472 2.472l.707-.707l.707-.707l-2.472-2.472zm2.472 2.472l.707.707l4.596-4.596l-.707-.707l-.707-.707l-4.596 4.596zM5 17v-1a1 1 0 0 1-1-1H2a3 3 0 0 0 3 3zm2 .5h1A1.5 1.5 0 0 0 6.5 16v2a.5.5 0 0 1-.5-.5zm0 2H6c0 1.03 1.176 1.618 2 1l-.6-.8l-.6-.8a.75.75 0 0 1 1.2.6zM18 4v1a1 1 0 0 1 1 1h2a3 3 0 0 0-3-3zM5 4V3a3 3 0 0 0-3 3h2a1 1 0 0 1 1-1z"
+            />
+          </svg>
+          <svg
+            v-else class="danmaku-toggle"
+            viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+          >
+            <path
+              fill="currentColor"
+              d="M5 8a1 1 0 0 0 0 2zm2 2a1 1 0 0 0 0-2zm4-2a1 1 0 1 0 0 2zm8 2a1 1 0 1 0 0-2zM3 12a1 1 0 1 0 0 2zm6 2a1 1 0 1 0 0-2zm-1.6 5.7l.6.8zM5 4v1h13V3H5zm2 15.5h1v-2H6v2zM6.5 17v-1H5v2h1.5zm4.5 0l-.6-.8l-3.6 2.7l.6.8l.6.8l3.6-2.7zM3 7h1V6H2v1zm0 8h1v-1.99H2V15zm17-9h-1v1h2V6zM5 9v1h2V8H5zm6 0v1h8V8h-8zm-8 4v1h6v-2H3zm18 3.5h-1a2.5 2.5 0 0 1-2.5 2.5v2a4.5 4.5 0 0 0 4.5-4.5zM17.5 20v-1a2.5 2.5 0 0 1-2.5-2.5h-2a4.5 4.5 0 0 0 4.5 4.5zM14 16.5h1a2.5 2.5 0 0 1 2.5-2.5v-2a4.5 4.5 0 0 0-4.5 4.5zm3.5-3.5v1a2.5 2.5 0 0 1 2.5 2.5h2a4.5 4.5 0 0 0-4.5-4.5zM15 14l-.707.707l4.975 4.975l.707-.707l.707-.707l-4.975-4.975zM5 17v-1a1 1 0 0 1-1-1H2a3 3 0 0 0 3 3zm2 .5h1A1.5 1.5 0 0 0 6.5 16v2a.5.5 0 0 1-.5-.5zm0 2H6c0 1.03 1.176 1.618 2 1l-.6-.8l-.6-.8a.75.75 0 0 1 1.2.6zM18 4v1a1 1 0 0 1 1 1h2a3 3 0 0 0-3-3zM5 4V3a3 3 0 0 0-3 3h2a1 1 0 0 1 1-1z"
+            />
+          </svg>
         </button>
         <button
           type="button" class="pb-word pb-secondary pb-icon"
@@ -773,18 +792,9 @@ function onSeek(event: MouseEvent) {
 .pb-word:hover { background: rgba(255, 255, 255, 0.1); }
 /* 图标型按钮（弹幕设置）：与播放 / 音量那几颗 30px 方钮同尺寸，不再吃文字内边距。 */
 .pb-word.pb-icon { display: grid; place-items: center; padding: 0; }
-.pb-word .danmaku-settings { display: block; width: 18px; height: 18px; }
+.pb-word .danmaku-settings,
+.pb-word .danmaku-toggle { display: block; width: 18px; height: 18px; }
 .pb-word.on { color: var(--vp-im-accent); }
-.pb-dot {
-  position: absolute;
-  left: 50%;
-  bottom: 3px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  transform: translateX(-50%);
-  background: #ff3b30;
-}
 .pb-input {
   flex: 1 1 auto;
   min-width: 76px;
