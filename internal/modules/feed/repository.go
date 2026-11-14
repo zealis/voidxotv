@@ -151,13 +151,15 @@ type CreatorProfile struct {
 	LikeCount      int64 `json:"like_count"`
 	FollowingCount int64 `json:"following_count"`
 	FollowerCount  int64 `json:"follower_count"`
+	// VerifiedCreator 是已认证创作者（users.role = 'creator'），前端在昵称旁挂标签。
+	VerifiedCreator bool `json:"verified_creator"`
 }
 
 func (r *Repository) Creator(ctx context.Context, handle string) (CreatorProfile, error) {
 	var profile CreatorProfile
 	var avatar *string
 	err := r.db.QueryRow(ctx, `
-		SELECT u.handle, u.display_name, u.bio, u.avatar_key,
+		SELECT u.handle, u.display_name, u.bio, u.avatar_key, u.role = 'creator',
 		       (SELECT count(*) FROM contents c
 		        WHERE c.author_id = u.id AND c.publish_state = 'published'
 		          AND c.review_status = 'approved' AND c.visibility = 'public'
@@ -172,7 +174,7 @@ func (r *Repository) Creator(ctx context.Context, handle string) (CreatorProfile
 		       (SELECT count(*) FROM follows f WHERE f.follower_id = u.id),
 		       (SELECT count(*) FROM follows f WHERE f.followee_id = u.id)
 		FROM users u WHERE u.handle = $1 AND u.status = 'active'`, nightid.Normalize(handle)).Scan(
-		&profile.Handle, &profile.DisplayName, &profile.Bio, &avatar,
+		&profile.Handle, &profile.DisplayName, &profile.Bio, &avatar, &profile.VerifiedCreator,
 		&profile.ContentCount, &profile.LikeCount, &profile.FollowingCount, &profile.FollowerCount)
 	if err != nil {
 		return profile, err

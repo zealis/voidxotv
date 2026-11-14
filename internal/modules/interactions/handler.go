@@ -258,18 +258,22 @@ type Comment struct {
 	UserID    int64     `json:"user_id"`
 	// ReplyCount 是该顶层评论线程内的可见回复数（仅顶层评论返回）。
 	ReplyCount int64 `json:"reply_count"`
+	// VerifiedCreator 表示作者是已认证创作者（users.role = 'creator'），前端据此在昵称旁挂标签。
+	VerifiedCreator bool `json:"verified_creator"`
 	// avatarKey 只在服务端流转：对外一律给可访问地址，不泄漏对象键。
 	avatarKey string
 }
 
 type Reply struct {
-	ID          int64     `json:"id"`
-	Body        string    `json:"body"`
-	Handle      string    `json:"handle"`
-	DisplayName string    `json:"display_name"`
-	AvatarURL   string    `json:"avatar_url"`
-	CreatedAt   time.Time `json:"created_at"`
-	UserID      int64     `json:"user_id"`
+	ID          int64  `json:"id"`
+	Body        string `json:"body"`
+	Handle      string `json:"handle"`
+	DisplayName string `json:"display_name"`
+	AvatarURL   string `json:"avatar_url"`
+	// VerifiedCreator 同 Comment：作者是否为已认证创作者。
+	VerifiedCreator bool      `json:"verified_creator"`
+	CreatedAt       time.Time `json:"created_at"`
+	UserID          int64     `json:"user_id"`
 	// ReplyTo 是「回复 @某人」的目标作者昵称（回复线程内其他回复时才有）。
 	ReplyTo   string `json:"reply_to,omitempty"`
 	avatarKey string
@@ -295,6 +299,7 @@ func (h *Handler) listComments(w http.ResponseWriter, r *http.Request) {
 		SELECT c.id, c.body, u.handle,
 		       COALESCE(NULLIF(btrim(u.display_name), ''), u.handle),
 		       COALESCE(u.avatar_key, ''),
+		       u.role = 'creator',
 		       c.created_at, c.user_id,
 		       (SELECT count(*) FROM comments rep
 		        WHERE rep.parent_id = c.id AND rep.status = 'visible')
@@ -312,7 +317,8 @@ func (h *Handler) listComments(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item Comment
 		if err := rows.Scan(&item.ID, &item.Body, &item.Handle, &item.DisplayName,
-			&item.avatarKey, &item.CreatedAt, &item.UserID, &item.ReplyCount); err != nil {
+			&item.avatarKey, &item.VerifiedCreator, &item.CreatedAt, &item.UserID,
+			&item.ReplyCount); err != nil {
 			h.fail(w, r, err)
 			return
 		}
@@ -371,6 +377,7 @@ func (h *Handler) listReplies(w http.ResponseWriter, r *http.Request) {
 		SELECT c.id, c.body, u.handle,
 		       COALESCE(NULLIF(btrim(u.display_name), ''), u.handle),
 		       COALESCE(u.avatar_key, ''),
+		       u.role = 'creator',
 		       c.created_at, c.user_id,
 		       COALESCE(NULLIF(btrim(rt.display_name), ''), rt.handle, '')
 		FROM comments c
@@ -389,7 +396,8 @@ func (h *Handler) listReplies(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item Reply
 		if err := rows.Scan(&item.ID, &item.Body, &item.Handle, &item.DisplayName,
-			&item.avatarKey, &item.CreatedAt, &item.UserID, &item.ReplyTo); err != nil {
+			&item.avatarKey, &item.VerifiedCreator, &item.CreatedAt, &item.UserID,
+			&item.ReplyTo); err != nil {
 			h.fail(w, r, err)
 			return
 		}
@@ -515,10 +523,14 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 	h.notifyMentions(r.Context(), id, principal, plain)
 
 	// 作者信息此时还没进列表，单独回填一次：客户端用返回值替换乐观插入的占位条目。
+	// 认证标记也要一起回，否则刚发的评论会少一个标签、刷新后才补上。
 	var displayName, avatarKey string
+	var verified bool
 	if err := h.db.QueryRow(r.Context(), `
-		SELECT COALESCE(NULLIF(btrim(display_name), ''), handle), COALESCE(avatar_key, '')
-		FROM users WHERE id = $1`, principal.UserID).Scan(&displayName, &avatarKey); err != nil {
+		SELECT COALESCE(NULLIF(btrim(display_name), ''), handle), COALESCE(avatar_key, ''),
+		       role = 'creator'
+		FROM users WHERE id = $1`, principal.UserID).Scan(
+		&displayName, &avatarKey, &verified); err != nil {
 		h.log.Warn("interactions: comment author", "error", err, "user_id", principal.UserID)
 		displayName = principal.Handle
 	}
@@ -526,7 +538,8 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 	httpserver.JSON(w, http.StatusCreated, Comment{
 		ID: commentID, Body: body, Handle: principal.Handle,
 		DisplayName: displayName, AvatarURL: h.avatarURL(r.Context(), avatarKey),
-		CreatedAt: createdAt, UserID: principal.UserID,
+		VerifiedCreator: verified,
+		CreatedAt:       createdAt, UserID: principal.UserID,
 	})
 }
 

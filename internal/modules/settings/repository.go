@@ -76,10 +76,10 @@ func (r *Repository) Update(ctx context.Context, userID int64, patch Patch) (Set
 func (r *Repository) Profile(ctx context.Context, userID int64) (Profile, error) {
 	var profile Profile
 	err := r.db.QueryRow(ctx, `
-		SELECT handle, display_name, bio, email, COALESCE(avatar_key, ''), created_at
+		SELECT handle, display_name, bio, email, COALESCE(avatar_key, ''), role = 'creator', created_at
 		FROM users WHERE id = $1`,
 		userID).Scan(&profile.Handle, &profile.DisplayName, &profile.Bio,
-		&profile.Email, &profile.AvatarKey, &profile.CreatedAt)
+		&profile.Email, &profile.AvatarKey, &profile.VerifiedCreator, &profile.CreatedAt)
 	if err != nil {
 		return Profile{}, fmt.Errorf("settings: profile: %w", err)
 	}

@@ -39,6 +39,22 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.21.0] - 2026-11-14
+
+### 新增
+
+- **已认证创作者标签**：创作者（`users.role = 'creator'`）的昵称旁显示靛蓝印章图标，
+  出现在三个位置——评论区（顶层评论与楼中楼）、创作者主页标题、「我」页昵称。
+  - 组件 `components/base/CreatorBadge.vue`：设计稿给的 24 格实心印章（对勾靠 `evenodd` 镂空），
+    尺寸由 `size` 传入，评论 13 / 楼中楼 12 / 我页 16 / 主页标题 18，`aria-label="已认证创作者"`。
+  - 接口补字段 `verified_creator`：`GET /contents/{id}/comments`、`.../replies`、
+    `POST /comments`（刚发的评论也要带标签，否则要刷新才出现）、
+    `GET /creators/{handle}` 的 `profile`、`GET /me/profile`。
+  - 判定一律用 `users.role = 'creator'`，不额外加表；取消认证后标签立即消失。
+  - 首页信息流里的作者名暂未加（本轮只按要求覆盖评论区与个人主页）。
+  - `.tools/headless-test/m62-creator-badge.js`：12 项全过（标签存在、无障碍名、尺寸区间、
+    与昵称中心偏差 ≤3px、实心 `#4f46e5` + 单路径 evenodd、未认证用户无标签、我页有标签）。
+
 ## [0.20.1] - 2026-11-14
 
 ### 修复

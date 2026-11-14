@@ -11,6 +11,8 @@ interface CommentItem {
   handle: string
   display_name?: string
   avatar_url?: string
+  /** 作者是已认证创作者时，昵称旁挂标签。 */
+  verified_creator?: boolean
   created_at: string
   user_id: number
   reply_count: number
@@ -23,6 +25,7 @@ interface ReplyItem {
   handle: string
   display_name?: string
   avatar_url?: string
+  verified_creator?: boolean
   created_at: string
   user_id: number
   reply_to?: string
@@ -374,7 +377,10 @@ function isMine(item: { user_id: number; id: number }): boolean {
             <ImIcon v-else name="user" :size="18" />
           </div>
           <div class="body">
-            <span class="name">{{ authorName(comment) }}</span>
+            <span class="name">
+              {{ authorName(comment) }}
+              <CreatorBadge v-if="comment.verified_creator" class="name-badge" size="13" />
+            </span>
             <p :class="{ pending: comment.pending }">
               <template v-for="(tk, i) in tokens(comment.body)" :key="i">
                 <img
@@ -408,7 +414,10 @@ function isMine(item: { user_id: number; id: number }): boolean {
                     <ImIcon v-else name="user" :size="14" />
                   </div>
                   <div class="body">
-                    <span class="name">{{ authorName(reply) }}</span>
+                    <span class="name">
+                      {{ authorName(reply) }}
+                      <CreatorBadge v-if="reply.verified_creator" class="name-badge" size="12" />
+                    </span>
                     <p :class="{ pending: reply.pending }">
                       <span v-if="reply.reply_to" class="reply-tag">回复 @{{ reply.reply_to }}</span>
                       <template v-for="(tk, i) in tokens(reply.body)" :key="i">
@@ -561,7 +570,13 @@ function isMine(item: { user_id: number; id: number }): boolean {
 .avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .avatar.small { width: 26px; height: 26px; }
 .body { flex: 1; min-width: 0; }
-.name { font-size: 12px; color: var(--vp-im-text-secondary); }
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--vp-im-text-secondary);
+}
 .body p { margin: 3px 0; font-size: 14px; line-height: 1.5; word-break: break-word; }
 .body p.pending { opacity: 0.55; }
 .mention { color: var(--vp-im-accent); }

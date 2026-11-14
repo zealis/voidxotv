@@ -5,6 +5,8 @@ import { ApiError, errorMessage } from '~/composables/useApi'
 interface CreatorProfile {
   handle: string
   display_name: string
+  /** 已认证创作者（users.role = 'creator'）。 */
+  verified_creator?: boolean
   bio: string
   avatar_url: string
   content_count: number
@@ -112,7 +114,10 @@ useHead({
         <span v-else>{{ handle.slice(0, 1).toUpperCase() }}</span>
       </div>
       <div class="identity">
-        <h1>{{ profile?.display_name || `用户${handle}` }}</h1>
+        <h1>
+          {{ profile?.display_name || `用户${handle}` }}
+          <CreatorBadge v-if="profile?.verified_creator" size="18" />
+        </h1>
         <p class="handle">夜街号：{{ nightId }}</p>
         <p v-if="profile?.bio" class="bio">{{ profile.bio }}</p>
         <p class="stats">
@@ -175,7 +180,11 @@ useHead({
   font-size: 24px; font-weight: 700; color: #fff;
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
-.identity h1 { margin: 0; font-size: 22px; }
+/* 标题与认证标签同一行居中：inline 排布时标签会比文字基线低约 2px。 */
+.identity h1 {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 8px; margin: 0; font-size: 22px;
+}
 .handle { margin: 2px 0 6px; font-size: 12px; color: var(--vp-im-text-secondary); }
 .bio {
   max-width: 520px; margin: 6px auto 10px; font-size: 12px; line-height: 1.6;

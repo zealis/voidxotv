@@ -72,7 +72,9 @@ type Profile struct {
 	Bio         string `json:"bio"`
 	Email       string `json:"email"`
 	// AvatarKey 只在服务端流转：对外一律给可访问地址，不泄漏对象键。
-	AvatarKey string    `json:"-"`
-	AvatarURL string    `json:"avatar_url"`
-	CreatedAt time.Time `json:"created_at"`
+	AvatarKey string `json:"-"`
+	AvatarURL string `json:"avatar_url"`
+	// VerifiedCreator 给自己页面用：已认证创作者在昵称旁挂标签。
+	VerifiedCreator bool      `json:"verified_creator"`
+	CreatedAt       time.Time `json:"created_at"`
 }

@@ -49,6 +49,8 @@ interface MyProfile {
   display_name: string
   bio: string
   avatar_url?: string
+  /** 自己是已认证创作者时，昵称旁挂标签。 */
+  verified_creator?: boolean
 }
 
 interface MyReport {
@@ -400,7 +402,10 @@ async function submitAppeal() {
 
           <div class="who">
             <div class="name">
-              <strong>{{ profile.display_name || profile.handle }}</strong>
+              <strong>
+                {{ profile.display_name || profile.handle }}
+                <CreatorBadge v-if="profile.verified_creator" size="16" />
+              </strong>
               <NuxtLink to="/settings" class="edit" aria-label="编辑资料" title="编辑资料">
                 <ImIcon name="edit" :size="14" />
               </NuxtLink>
@@ -598,7 +603,10 @@ async function submitAppeal() {
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .who { min-width: 0; flex: 1; display: grid; gap: 8px; }
 .name { display: flex; align-items: center; gap: 8px; }
-.name strong { font-size: 20px; font-weight: 600; letter-spacing: 0.01em; }
+.name strong {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 20px; font-weight: 600; letter-spacing: 0.01em;
+}
 .edit {
   display: grid; place-items: center; width: 22px; height: 22px;
   color: rgba(255, 255, 255, 0.65); border-radius: 6px;
