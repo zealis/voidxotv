@@ -397,7 +397,7 @@ onBeforeUnmount(() => {
           @comment="sheetOpen = true" @favorite="onFavorite(item)"
           @share="onShare(item)" @follow="onFollow(item)" @report="reportOpen = true"
           @watch-later="onWatchLater(item)"
-          @expand="expanded = !expanded" @unmute="player.setMuted(false)"
+          @expand="expanded = !expanded" @mute-toggle="player.setMuted(!player.state.muted)"
           @seek="player.seekRatio($event)"
           @rate="player.setRate($event)" @level="player.setLevel($event)"
           @volume="player.setVolume($event)"

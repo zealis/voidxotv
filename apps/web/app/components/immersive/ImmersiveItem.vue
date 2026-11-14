@@ -56,7 +56,8 @@ const emit = defineEmits<{
   report: []
   expand: []
   retry: []
-  unmute: []
+  /** 切换静音：同一个键既取消静音也能重新静音。 */
+  muteToggle: []
   seek: [ratio: number]
   rate: [value: number]
   level: [value: number]
@@ -143,15 +144,19 @@ function togglePop(name: 'rate' | 'quality' | 'volume') {
   openPop.value = openPop.value === name ? '' : name
 }
 
-// 音量键：静音时这一下直接恢复声音。画面上那枚「点击取消静音」浮层已去掉，
-// 用户点音量图标的心智就是「把声音打开」，不该要求他先开弹层再拖滑块。
+// 音量键只做一件事：切换静音状态（同一个键既能取消静音，也能重新静音）。
+// 音量滑块改成鼠标悬浮时出现——点击被「静音开关」占用了，再让它兼职开弹层会互相打架。
 function onVolumeClick() {
-  if (props.player.muted) {
-    emit('unmute')
+  emit('muteToggle')
+  openPop.value = ''
+}
+
+function hoverVolume(open: boolean) {
+  if (!open && openPop.value === 'volume') {
     openPop.value = ''
-    return
+  } else if (open) {
+    openPop.value = 'volume'
   }
-  togglePop('volume')
 }
 
 // 暂未实现的条目明确说「即将开放」，不做点了没反应的死按钮。
@@ -431,10 +436,15 @@ function onSeek(event: MouseEvent) {
           <ImIcon name="pip" :size="18" />
         </button>
 
-        <span class="pb-anchor pb-secondary">
+        <span
+          class="pb-anchor pb-secondary"
+          @mouseenter="hoverVolume(true)" @mouseleave="hoverVolume(false)"
+        >
           <button
             type="button" class="pb-btn" :aria-expanded="openPop === 'volume'"
-            :aria-label="props.player.muted ? '取消静音' : '音量'" @click="onVolumeClick"
+            :aria-label="props.player.muted ? '取消静音' : '静音'"
+            :title="props.player.muted ? '取消静音' : '静音'"
+            @click="onVolumeClick" @focus="openPop = 'volume'"
           >
             <ImIcon :name="props.player.muted ? 'mute' : 'volume'" :size="18" />
           </button>
@@ -457,14 +467,16 @@ function onSeek(event: MouseEvent) {
     </div>
 
     <!-- ≤780px 不渲染整条功能栏（设计如此），而自动播放默认静音：
-         没有这个入口，手机端就永远没有声音。放顶栏「搜索」左边的纯图标位，
-         点一下即恢复声音，取消静音后自己消失（不再用带文字的浮层挡画面）。 -->
+         顶栏「搜索」左边留一颗常驻的静音开关（图标随状态切换），
+         点一下取消静音，再点一下重新静音——不能只在静音时才出现，否则没法再关掉声音。 -->
     <button
-      v-if="props.active && props.item.type === 'video' && props.player.ready && props.player.muted"
+      v-if="props.active && props.item.type === 'video' && props.player.ready"
       type="button" class="mobile-unmute"
-      aria-label="取消静音" @click="emit('unmute')"
+      :aria-label="props.player.muted ? '取消静音' : '静音'"
+      :title="props.player.muted ? '取消静音' : '静音'"
+      @click="emit('muteToggle')"
     >
-      <ImIcon name="mute" :size="22" />
+      <ImIcon :name="props.player.muted ? 'mute' : 'volume'" :size="22" />
     </button>
 
     <!-- 图集指示器（§5.4）：胶囊底 + 当前张实心点 + 序号，避免散点贴在画面上看不清。 -->

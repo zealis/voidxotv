@@ -283,7 +283,7 @@ onBeforeUnmount(() => {
             @comment="sheetOpen = true" @favorite="onFavorite(item)"
             @share="notify('深链接：' + deepLink)" @follow="toggleFollow(item.slug)" @report="reportOpen = true"
             @watch-later="toggleWatchlist"
-            @expand="expanded = !expanded" @unmute="player.setMuted(false)"
+            @expand="expanded = !expanded" @mute-toggle="player.setMuted(!player.state.muted)"
             @seek="player.seekRatio($event)"
             @rate="player.setRate($event)" @level="player.setLevel($event)"
             @volume="player.setVolume($event)"
@@ -379,6 +379,12 @@ onBeforeUnmount(() => {
 .watchlist[aria-pressed="true"] {
   border-color: var(--vp-im-accent);
   color: var(--vp-im-accent);
+}
+/* 窄屏顶栏右侧已经排了搜索与静音开关，这颗胶囊会直接压在它们上面
+   （实测 390px 下胶囊 x292–370 与搜索 x330–374 重叠）。
+   晚点再看在右侧「⋯」菜单里本来就有入口，手机上收起来即可。 */
+@media (max-width: 780px) {
+  .watchlist { display: none; }
 }
 .toast {
   position: fixed;
