@@ -39,6 +39,23 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.23.5] - 2026-11-14
+
+### 修复
+
+- **播放控制条 · 音量滑块一移鼠标就消失**：`apps/web/app/components/immersive/ImmersiveItem.vue`
+  的音量浮层用 `.pb-pop` 的 `bottom: calc(100% + 8px)` 浮在按钮上方，鼠标从按钮走向滑块
+  会先落进这 8px「既不属于按钮也不属于浮层」的空隙，`@mouseleave="hoverVolume(false)"`
+  当场把 `openPop` 清空，滑块始终点不到。
+  - `hoverVolume(false)` 改成留 300ms 宽容期再关；期间鼠标重新进入按钮或浮层
+    （`cancelVolumeClose`）就撤销关闭，浮层自身也接管 `mouseenter` / `mouseleave`。
+  - `.pb-pop-volume::after` 加一条 30×10px 透明桥接条补上空隙，让鼠标路径始终落在
+    `.pb-anchor` 的后代里；宽度只盖按钮正上方，不挡左侧其它按钮。
+  - 按钮 `@focus` 改走 `hoverVolume(true)`；`onVolumeClick`、切换内容、组件卸载时
+    都清掉待关闭定时器，避免延迟回调误关后来新开的浮层。
+  - `.tools/headless-test/m70-volume-hover.js`：分步模拟鼠标跨过间隙到滑块、命中
+    range 控件、点击滑块、移开后的宽容期与最终关闭、宽容期内移回可撤销关闭。
+
 ## [0.23.4] - 2026-11-14
 
 ### 改进

@@ -146,16 +146,34 @@ function togglePop(name: 'rate' | 'quality' | 'volume') {
 
 // 音量键只做一件事：切换静音状态（同一个键既能取消静音，也能重新静音）。
 // 音量滑块改成鼠标悬浮时出现——点击被「静音开关」占用了，再让它兼职开弹层会互相打架。
+// 滑块浮在按钮上方 8px，鼠标走过去会先落进不属于任何元素的空隙并触发 mouseleave；
+// 立刻关弹层会让人永远碰不到滑块，所以给关闭留一段宽容期。
+const VOLUME_HOVER_GRACE = 300
+let volumeCloseTimer: ReturnType<typeof setTimeout> | null = null
+
+function cancelVolumeClose() {
+  if (volumeCloseTimer) {
+    clearTimeout(volumeCloseTimer)
+    volumeCloseTimer = null
+  }
+}
+
 function onVolumeClick() {
+  cancelVolumeClose()
   emit('muteToggle')
   openPop.value = ''
 }
 
 function hoverVolume(open: boolean) {
-  if (!open && openPop.value === 'volume') {
-    openPop.value = ''
-  } else if (open) {
+  cancelVolumeClose()
+  if (open) {
     openPop.value = 'volume'
+  } else if (openPop.value === 'volume') {
+    volumeCloseTimer = setTimeout(() => {
+      volumeCloseTimer = null
+      // 宽容期内可能又开了别的浮层，只收掉仍是音量的那个。
+      if (openPop.value === 'volume') openPop.value = ''
+    }, VOLUME_HOVER_GRACE)
   }
 }
 
@@ -212,6 +230,7 @@ watch([openPop, mobileDanmaku], ([pop, mobile]) => {
 
 // 切到另一条内容时浮层不能留在屏幕上。
 watch(() => props.item.id, () => {
+  cancelVolumeClose()
   openPop.value = ''
   closeMobileDanmaku()
   stopGallery()
@@ -220,6 +239,7 @@ watch(() => props.item.id, () => {
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocPointerDown, true)
   document.removeEventListener('keydown', onDocKeydown, true)
+  cancelVolumeClose()
   stopGallery()
 })
 
@@ -475,11 +495,14 @@ function onSeek(event: MouseEvent) {
             type="button" class="pb-btn" :aria-expanded="openPop === 'volume'"
             :aria-label="props.player.muted ? '取消静音' : '静音'"
             :title="props.player.muted ? '取消静音' : '静音'"
-            @click="onVolumeClick" @focus="openPop = 'volume'"
+            @click="onVolumeClick" @focus="hoverVolume(true)"
           >
             <ImIcon :name="props.player.muted ? 'mute' : 'volume'" :size="18" />
           </button>
-          <div v-if="openPop === 'volume'" class="pb-pop pb-pop-volume" role="group" aria-label="音量">
+          <div
+            v-if="openPop === 'volume'" class="pb-pop pb-pop-volume" role="group" aria-label="音量"
+            @mouseenter="cancelVolumeClose" @mouseleave="hoverVolume(false)"
+          >
             <input
               type="range" min="0" max="100" step="1"
               :value="Math.round(props.player.volume * 100)" aria-label="音量"
@@ -904,6 +927,17 @@ function onSeek(event: MouseEvent) {
 .pb-pop button.on { background: var(--vp-im-accent); color: var(--vp-im-on-accent); }
 .pb-pop-volume { width: 132px; padding: 12px; }
 .pb-pop-volume input { width: 100%; accent-color: var(--vp-im-accent); }
+/* 弹层底边与按钮顶边之间有 8px 空隙，鼠标走过去会短暂落在命中区之外并触发
+   mouseleave；用一条与按钮等宽的透明桥接条补上，让路径始终在 .pb-anchor 的后代里。
+   只盖按钮正上方 30px，不伸到左边其它按钮上。 */
+.pb-pop-volume::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: 30px;
+  height: 10px;
+}
 
 /* 弹幕层：从右向左滚动，按 lane 分轨（§6.3）。 */
 .danmaku-layer {
