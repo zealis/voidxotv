@@ -43,6 +43,23 @@ function go(index: number) {
   emit('change', active.value)
 }
 
+// 左右切换按钮：首尾相接成环（最后一张往右回到第一张，第一张往左到最后一张）。
+// 环跳时用瞬时定位——跨整条平滑滚动会从头扫到尾，看着像误触连翻。
+function step(delta: number) {
+  const count = props.images.length
+  if (count < 2) return
+  const target = (active.value + delta + count) % count
+  const wrapping = Math.abs(target - active.value) > 1
+  const element = scroller.value
+  if (!element) return
+  element.scrollTo({
+    left: target * element.clientWidth,
+    behavior: wrapping ? 'auto' : 'smooth',
+  })
+  active.value = target
+  emit('change', active.value)
+}
+
 // 父级（图片控制条的自动轮播）改 index 时跟随；值相同则为自身滚动的回声，忽略。
 watch(() => props.index, (value) => {
   if (typeof value === 'number') go(value)
@@ -59,19 +76,28 @@ watch(() => props.index, (value) => {
         />
       </div>
     </div>
+    <!-- 左右切换固定在画面中部两侧，首尾成环，所以两颗都常驻、不随张序消失。 -->
     <button
-      v-if="active > 0" type="button" class="arrow left" aria-label="上一张"
-      @click.stop="go(active - 1)"
+      v-if="props.images.length > 1" type="button" class="arrow left" aria-label="上一张"
+      @click.stop="step(-1)"
     ><ImIcon name="back" :size="20" /></button>
     <button
-      v-if="active < props.images.length - 1" type="button" class="arrow right" aria-label="下一张"
-      @click.stop="go(active + 1)"
+      v-if="props.images.length > 1" type="button" class="arrow right" aria-label="下一张"
+      @click.stop="step(1)"
     ><ImIcon name="back" :size="20" /></button>
   </div>
 </template>
 
 <style scoped>
-.gallery { position: absolute; inset: 0; overflow: hidden; background: var(--vp-im-bg); }
+.gallery {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--vp-im-bg);
+  /* 切换按钮的内缩量按「操作栏右偏移 + 一颗操作按钮 + 呼吸位」算：
+     贴边的 8px 会被右侧头像 / 点赞整列压住，手指也容易误触系统手势区。 */
+  --gallery-arrow-inset: calc(var(--vp-im-action-rail-offset-right) + var(--vp-im-action-size) + 20px);
+}
 .strip {
   display: flex;
   width: 100%;
@@ -91,6 +117,7 @@ watch(() => props.index, (value) => {
   place-items: center;
 }
 .slide img { max-width: 100%; max-height: 100%; object-fit: contain; }
+/* 切换按钮固定在中部两侧，首尾成环所以两颗常驻；内缩量见 .gallery 的自定义属性。 */
 .arrow {
   position: absolute;
   top: 50%;
@@ -99,12 +126,26 @@ watch(() => props.index, (value) => {
   height: 44px;
   display: grid;
   place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 50%;
   color: #fff;
   background: rgba(10, 10, 20, 0.55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   cursor: pointer;
+  transition: background 160ms ease, opacity 160ms ease;
 }
-.arrow.left { left: 8px; }
-.arrow.right { right: 8px; rotate: 180deg; }
+.arrow:hover { background: rgba(10, 10, 20, 0.72); }
+.arrow:active { background: rgba(10, 10, 20, 0.82); }
+.arrow:focus-visible { outline: 2px solid var(--vp-im-accent); outline-offset: 2px; }
+.arrow.left { left: var(--gallery-arrow-inset); }
+.arrow.right { right: var(--gallery-arrow-inset); }
+/* 右箭头只翻图标，不翻按钮：`rotate` 单独作用在按钮上会和 translateY(-50%)
+   叠成半颗按钮的高度差，两颗箭头一高一低。 */
+.arrow.right :deep(svg) { transform: rotate(180deg); }
+/* 手机上按钮略小，内缩量与桌面同一口径——保证仍让开右侧头像 / 点赞那一列。 */
+@media (max-width: 780px) {
+  .arrow { width: 40px; height: 40px; }
+}
 </style>
