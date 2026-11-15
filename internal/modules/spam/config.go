@@ -50,7 +50,7 @@ func (c Config) Public() Public {
 		LexiconWords: c.LexiconWords, LexiconAt: c.LexiconAt,
 		Installed:          strings.TrimSpace(c.LexiconText) != "",
 		LexiconSource:      LexiconSourceURL(),
-		LexiconSourceLabel: lexiconDir,
+		LexiconSourceLabel: lexiconDisplayName,
 	}
 }
 

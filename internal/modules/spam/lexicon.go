@@ -25,6 +25,8 @@ const (
 	lexiconDir    = "Vocabulary/微信输入法"
 	lexiconFile   = "微信输入法内置词库26.11.7.txt"
 	lexiconPath   = lexiconDir + "/" + lexiconFile
+	// 后台「词库位置」显示的文案：只给仓库名，不暴露内部目录结构。
+	lexiconDisplayName = "Sensitive-lexicon"
 	// 单个词库文件大小上限：上游若被改写成错误页 / 巨型文件，不该把内存打爆。
 	maxLexiconBytes = 8 << 20
 )
