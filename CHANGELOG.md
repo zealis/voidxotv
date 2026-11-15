@@ -39,6 +39,24 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.25.0] - 2026-11-15
+
+### 新增
+
+- **功能条弹幕输入接入表情面板**：`apps/web/app/components/immersive/EmojiPanel.vue`
+  新增 `emojiOnly` 模式（`true` 时隐藏底部「表情 / GIF」切换、不渲染 `GifPanel`），
+  因为弹幕是纯文本、放不了 GIF；`ImmersiveItem.vue` 的 `.pb-input` 表情图标从
+  装饰改为可点按钮，移动端 `.dm-sheet` 的「插入表情」也不再写死 😊，
+  两处都打开 `emojiOnly` 面板。
+  - 选中表情插到光标处（与评论 `insertEmoji` 同口径），`maxlength=30` 自己挡一道；
+    面板可连选，发送 / 点面板外 / Esc / 切换内容时收起。
+  - 评论面板默认行为不变（仍是两个页签 + GIF 搜索）。
+  - `.pb-input` 从 `<label>` 改成 `<div>` 并加 `position: relative` 作面板锚点，
+    避免 `<label>` 把面板内的点击也当成聚焦输入框；表情按钮只做图标提亮、不加悬浮灰底。
+  - 移动端面板用 `.dm-sheet :deep(.emoji-panel)` 强制横向铺满输入条。
+  - `.tools/headless-test/m75-danmaku-emoji.js`：校验弹幕面板无 GIF 页签、光标处插入、
+    toggle / 点外 / Esc 收起、评论面板仍有两个页签、移动端铺满与插入、截图。
+
 ## [0.24.1] - 2026-11-15
 
 ### 改进

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// 评论表情面板：两个页签——「表情」（Google Noto 3D，按分类分页）与「GIF」（搜索图源）。
+// 表情面板：默认两个页签——「表情」（Google Noto 3D，按分类分页）与「GIF」（搜索图源）。
+// emojiOnly 给弹幕这类纯文本输入用：隐藏底部切换、不加载 GIF，只留表情。
 // 表情图形是同源 PNG（public/emoji3d，由 scripts/sync-emoji3d.mjs 导出），
 // 尺寸固定 26px，避免不同表情视觉大小不一；3D 渲染比线性图标需要更大的显示尺寸。
+const props = withDefaults(defineProps<{ emojiOnly?: boolean }>(), { emojiOnly: false })
 const emit = defineEmits<{ pick: [value: string]; 'pick-gif': [url: string] }>()
 
 // emoji：分类 + 表情栅格；gif：搜索框 + 结果栅格（见 GifPanel）。
@@ -86,10 +88,11 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncEdges))
       </button>
     </div>
     <!-- GIF 页：搜索 + 结果，点选后交给父组件待发送。 -->
-    <GifPanel v-else class="emoji-gif" @pick="emit('pick-gif', $event)" />
+    <GifPanel v-else-if="!props.emojiOnly" class="emoji-gif" @pick="emit('pick-gif', $event)" />
 
-    <!-- 底部类型选择器：表情 / GIF 两个页签，选中态用品牌强调色。 -->
-    <div class="emoji-foot">
+    <!-- 底部类型选择器：表情 / GIF 两个页签，选中态用品牌强调色。
+         emojiOnly（弹幕等纯文本输入）不渲染这一条，也就完全看不到 GIF 入口。 -->
+    <div v-if="!props.emojiOnly" class="emoji-foot">
       <button
         type="button" class="kind" :class="{ on: mode === 'emoji' }"
         :aria-pressed="mode === 'emoji'" aria-label="表情" title="表情"

@@ -86,6 +86,8 @@ const viewportRatio = ref(1.78)
 // 弹幕（UI 评审阶段为本地弹幕；后端持久化后接入列表拉取与发送）
 const danmakuOn = ref(true)
 const danmakuInput = ref('')
+const danmakuInputEl = ref<HTMLInputElement | null>(null)
+const danmakuEmojiOpen = ref(false)
 const danmakuList = ref<{ id: number; bornAt: number; text: string; lane: number }[]>([])
 let danmakuSeq = 0
 const danmakuActive = computed(() => {
@@ -110,6 +112,7 @@ function sendDanmaku() {
   if (!text) return
   danmakuList.value.push({ id: Date.now(), bornAt: Date.now(), text, lane: danmakuList.value.length % 6 })
   danmakuInput.value = ''
+  danmakuEmojiOpen.value = false
 }
 
 function toggleDanmaku() {
@@ -134,6 +137,29 @@ const openPop = ref<'' | 'rate' | 'quality' | 'volume'>('')
 // 移动端没有功能条：「弹」按钮唤起底部输入条（§6.3）。
 const mobileDanmaku = ref(false)
 const mobileInput = ref<HTMLInputElement | null>(null)
+
+// 弹幕是纯文本：复用评论的表情面板，但用 emojiOnly 去掉 GIF 页签。
+function toggleDanmakuEmoji() {
+  danmakuEmojiOpen.value = !danmakuEmojiOpen.value
+}
+
+// 插到光标处（与评论同一口径）；maxlength=30 拦不住直接赋值，自己挡一道。
+function insertDanmakuEmoji(char: string) {
+  const element = mobileDanmaku.value ? mobileInput.value : danmakuInputEl.value
+  if (danmakuInput.value.length + char.length > 30) return
+  if (!element) {
+    danmakuInput.value += char
+    return
+  }
+  const start = element.selectionStart ?? danmakuInput.value.length
+  const end = element.selectionEnd ?? start
+  danmakuInput.value = danmakuInput.value.slice(0, start) + char + danmakuInput.value.slice(end)
+  void nextTick(() => {
+    element.focus()
+    const caret = start + char.length
+    element.setSelectionRange(caret, caret)
+  })
+}
 
 const qualityLabel = computed(() => {
   if (props.player.level < 0) return '智能'
@@ -197,6 +223,7 @@ function openMobileDanmaku() {
 
 function closeMobileDanmaku() {
   mobileDanmaku.value = false
+  danmakuEmojiOpen.value = false
 }
 
 function sendMobileDanmaku() {
@@ -210,6 +237,10 @@ function onDocPointerDown(event: PointerEvent) {
   if (!target) return
   if (openPop.value && !bar.value?.contains(target)) openPop.value = ''
   if (mobileDanmaku.value && !target.closest('.dm-sheet')) closeMobileDanmaku()
+  // 面板与触发按钮分别在 .pb-input / .dm-sheet 内，点这两处之外才收起。
+  if (danmakuEmojiOpen.value && !target.closest('.pb-input') && !target.closest('.dm-sheet')) {
+    danmakuEmojiOpen.value = false
+  }
 }
 
 function onDocKeydown(event: KeyboardEvent) {
@@ -218,8 +249,8 @@ function onDocKeydown(event: KeyboardEvent) {
   closeMobileDanmaku()
 }
 
-watch([openPop, mobileDanmaku], ([pop, mobile]) => {
-  if (pop || mobile) {
+watch([openPop, mobileDanmaku, danmakuEmojiOpen], ([pop, mobile, emoji]) => {
+  if (pop || mobile || emoji) {
     document.addEventListener('pointerdown', onDocPointerDown, true)
     document.addEventListener('keydown', onDocKeydown, true)
   } else {
@@ -430,13 +461,21 @@ function onSeek(event: MouseEvent) {
           </svg>
         </button>
 
-        <label class="pb-input">
-          <ImIcon name="face" :size="16" />
+        <div class="pb-input">
+          <button
+            type="button" class="pb-face" :class="{ on: danmakuEmojiOpen }"
+            :aria-expanded="danmakuEmojiOpen" aria-label="弹幕表情" title="表情"
+            @click="toggleDanmakuEmoji"
+          >
+            <ImIcon name="face" :size="16" />
+          </button>
           <input
-            v-model="danmakuInput" maxlength="30" placeholder="发一条友好的弹幕吧"
+            ref="danmakuInputEl" v-model="danmakuInput" maxlength="30"
+            placeholder="发一条友好的弹幕吧"
             aria-label="发送弹幕" @keyup.enter="sendDanmaku"
           />
-        </label>
+          <EmojiPanel v-if="danmakuEmojiOpen" emoji-only @pick="insertDanmakuEmoji" />
+        </div>
         <button type="button" class="pb-send" :disabled="!danmakuInput.trim()" @click="sendDanmaku">发送</button>
 
         <button
@@ -612,11 +651,13 @@ function onSeek(event: MouseEvent) {
         @keyup.enter="sendMobileDanmaku"
       />
       <button
-        type="button" class="dm-sheet-face" aria-label="插入表情"
-        @click="danmakuInput = `${danmakuInput}😊`.slice(0, 30)"
+        type="button" class="dm-sheet-face" :class="{ on: danmakuEmojiOpen }"
+        :aria-expanded="danmakuEmojiOpen" aria-label="插入表情"
+        @click="toggleDanmakuEmoji"
       >
         <ImIcon name="face" :size="20" />
       </button>
+      <EmojiPanel v-if="danmakuEmojiOpen" emoji-only @pick="insertDanmakuEmoji" />
     </div>
 
   </article>
@@ -820,6 +861,7 @@ function onSeek(event: MouseEvent) {
 .pb-word .pb-danmaku { display: block; width: 18px; height: 18px; }
 .pb-word.on { color: var(--vp-im-accent); }
 .pb-input {
+  position: relative;
   flex: 1 1 auto;
   min-width: 76px;
   display: flex;
@@ -835,6 +877,21 @@ function onSeek(event: MouseEvent) {
   color: var(--vp-im-text-secondary);
   transition: border-color 160ms ease, background-color 160ms ease;
 }
+/* 表情入口：只做图标提亮，不画悬浮灰底（与评论框同一口径）。 */
+.pb-face {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vp-im-text-secondary);
+  cursor: pointer;
+}
+.pb-face:hover, .pb-face.on { color: var(--vp-im-text-primary); }
 .pb-input input {
   flex: 1;
   min-width: 0;
@@ -1048,6 +1105,9 @@ function onSeek(event: MouseEvent) {
   color: var(--vp-im-text-secondary);
   cursor: pointer;
 }
+.dm-sheet-face.on { color: var(--vp-im-accent); }
+/* 移动端输入条本身就是定位锚点：面板横向铺满整条，不按桌面 340px 卡片靠右挂。 */
+.dm-sheet :deep(.emoji-panel) { left: 0; right: 0; width: auto; }
 @media (min-width: 781px) {
   .dm-sheet { display: none; }
 }
