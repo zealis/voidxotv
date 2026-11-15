@@ -105,15 +105,15 @@ async function merge() {
   }
 }
 
-async function setPlacement(raw: unknown, placement: string) {
+async function setPlacement(raw: unknown, placement: string, enabled = true) {
   const topic = raw as AdminTopic
   try {
     await request('/api/v1/admin/topics/placements', {
       method: 'POST',
-      body: { topic_id: topic.id, placement },
+      body: { topic_id: topic.id, placement, enabled },
       csrf: true,
     })
-    ElMessage.success('运营位已更新')
+    ElMessage.success(enabled ? '运营位已更新' : '已取消推荐')
     await load()
   } catch (cause) {
     ElMessage.error(cause instanceof Error ? cause.message : '操作失败')
@@ -176,7 +176,10 @@ async function setPlacement(raw: unknown, placement: string) {
               v-if="scope.row.status === 'offline'" size="small" plain
               @click="setStatus(scope.row, 'available')"
             >恢复</ElButton>
-            <ElButton size="small" plain @click="setPlacement(scope.row, 'featured')">推荐</ElButton>
+            <ElButton
+              size="small" plain
+              @click="setPlacement(scope.row, 'featured', !scope.row.featured)"
+            >{{ scope.row.featured ? '取消推荐' : '推荐' }}</ElButton>
             <ElButton size="small" plain @click="setPlacement(scope.row, 'pinned')">置顶</ElButton>
             <ElButton size="small" plain type="danger" @click="openMerge(scope.row)">合并</ElButton>
           </div>

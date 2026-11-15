@@ -138,13 +138,16 @@ func (r *Repository) SanctionUser(ctx context.Context, userID, adminID int64,
 // ── 话题运营（§4.7）───────────────────────────────────────────────
 
 type AdminTopic struct {
-	ID           int64     `json:"id"`
-	Slug         string    `json:"slug"`
-	Name         string    `json:"name"`
-	Status       string    `json:"status"`
-	ContentCount int64     `json:"content_count"`
-	Placement    string    `json:"placement"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           int64  `json:"id"`
+	Slug         string `json:"slug"`
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	ContentCount int64  `json:"content_count"`
+	Placement    string `json:"placement"`
+	// Featured 单独标记「推荐」运营位：列表里的 placement 只展示最新一条，
+	// 同时置顶时会显示成 pinned，按钮状态不能拿它判断。
+	Featured  bool      `json:"featured"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (r *Repository) ListTopics(ctx context.Context, status string) ([]AdminTopic, error) {
@@ -153,6 +156,8 @@ func (r *Repository) ListTopics(ctx context.Context, status string) ([]AdminTopi
 		       (SELECT count(*) FROM content_topics ct WHERE ct.topic_id = t.id),
 		       COALESCE((SELECT placement FROM topic_placements tp
 		                 WHERE tp.topic_id = t.id ORDER BY tp.id DESC LIMIT 1), ''),
+		       EXISTS (SELECT 1 FROM topic_placements tp
+		               WHERE tp.topic_id = t.id AND tp.placement = 'featured'),
 		       t.created_at
 		FROM topics t
 		WHERE ($1 = '' OR t.status = $1)
@@ -165,7 +170,7 @@ func (r *Repository) ListTopics(ctx context.Context, status string) ([]AdminTopi
 	for rows.Next() {
 		var item AdminTopic
 		if err := rows.Scan(&item.ID, &item.Slug, &item.Name, &item.Status,
-			&item.ContentCount, &item.Placement, &item.CreatedAt); err != nil {
+			&item.ContentCount, &item.Placement, &item.Featured, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, item)
@@ -236,9 +241,16 @@ func (r *Repository) MergeTopics(ctx context.Context, sourceID, targetID int64) 
 }
 
 func (r *Repository) SetTopicPlacement(ctx context.Context, topicID, adminID int64,
-	placement string, effectiveAt time.Time) error {
+	placement string, effectiveAt time.Time, enabled bool) error {
 	if placement != "featured" && placement != "pinned" {
 		return fmt.Errorf("%w: 运营位类型无效", ErrInvalidInput)
+	}
+	// 取消推荐 / 置顶：删掉这一条运营位记录，而不是插入一条空值。
+	if !enabled {
+		_, err := r.db.Exec(ctx, `
+			DELETE FROM topic_placements WHERE topic_id = $1 AND placement = $2`,
+			topicID, placement)
+		return err
 	}
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO topic_placements (topic_id, placement, effective_at, created_by)

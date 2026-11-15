@@ -531,6 +531,9 @@ func (h *Handler) topicPlacement(w http.ResponseWriter, r *http.Request) {
 		TopicID     int64  `json:"topic_id"`
 		Placement   string `json:"placement"`
 		EffectiveAt string `json:"effective_at"`
+		// Enabled 缺省为 true，保持「设置运营位」的旧调用不变；
+		// 显式传 false 表示取消该运营位。
+		Enabled *bool `json:"enabled"`
 	}
 	if err := httpserver.DecodeJSON(r, &request); err != nil {
 		h.writeError(w, r, err)
@@ -545,16 +548,21 @@ func (h *Handler) topicPlacement(w http.ResponseWriter, r *http.Request) {
 		}
 		effective = parsed
 	}
+	enabled := true
+	if request.Enabled != nil {
+		enabled = *request.Enabled
+	}
 	principal, _ := principalFrom(r.Context())
 	if err := h.repo.SetTopicPlacement(r.Context(), request.TopicID, principal.AdminID,
-		request.Placement, effective); err != nil {
+		request.Placement, effective, enabled); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
 	h.audit(r, "topic.placement", "topic", request.TopicID, nil,
-		map[string]any{"placement": request.Placement, "effective_at": effective})
+		map[string]any{"placement": request.Placement, "enabled": enabled,
+			"effective_at": effective})
 	httpserver.JSON(w, http.StatusOK, map[string]any{"placement": request.Placement,
-		"effective_at": effective})
+		"enabled": enabled, "effective_at": effective})
 }
 
 // ── 混合来源与系统设置 ────────────────────────────────────────────

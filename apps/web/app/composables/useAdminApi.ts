@@ -94,6 +94,8 @@ export interface AdminTopic {
   status: string
   content_count: number
   placement: string
+  /** 是否处于「推荐」运营位；与展示用的 placement 分开，避免同时置顶时误判。 */
+  featured: boolean
   created_at: string
 }
 

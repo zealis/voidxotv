@@ -39,6 +39,29 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.29.2] - 2026-11-15
+
+### 修复
+
+- **后台话题运营位「推荐」无法取消**：点「推荐」后按钮仍是「推荐」，再点只会重复
+  写同一条 `featured` 记录。根因：`SetTopicPlacement` 只做
+  `INSERT … ON CONFLICT DO UPDATE`、没有删除分支，`placement` 也只接受
+  `featured/pinned`；前端 `setPlacement` 固定传 `'featured'`；此外 `ListTopics`
+  只返回「最新一条」`placement`，同时置顶时会显示成 `pinned`，不能拿它判断
+  是否已推荐。改法：
+  - `POST /api/v1/admin/topics/placements` 增加可选 `enabled`（缺省 true，兼容
+    旧调用），`false` 时删除 `topic_id + placement` 那条记录；审计记录 `enabled`。
+  - `ListTopics` 增加独立的 `featured` 布尔，`AdminTopic` 同步该字段。
+  - `AdminTopics.vue` 的「推荐」按钮按 `featured` 在「推荐 / 取消推荐」间切换
+    并传 `enabled`，成功提示区分「运营位已更新 / 已取消推荐」。
+
+### 改进
+
+- `.tools/headless-test/m86-topic-placement.js`：13 项全过（在临时话题上完成
+  推荐 → 取消 → 再次推荐 的完整 toggle，接口 `featured` / `placement` 同步、
+  按钮文案同步、无前端异常）；临时话题、孤立运营位与审计跑完清理，基线
+  topics 2 / topic_placements 2 不变。
+
 ## [0.29.1] - 2026-11-15
 
 ### 改进
