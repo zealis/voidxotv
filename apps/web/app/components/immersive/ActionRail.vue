@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 右侧操作栏（UI 规范 §6.2）：圆形玻璃底仅用于按钮，头像使用实色描边。
 // 低频的「晚点再看」与「举报」收进分享下方三个点的菜单，避免操作栏被次要动作拉长。
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { FeedItem } from '~/composables/useFeed'
 
 const props = defineProps<{
@@ -15,6 +15,10 @@ const props = defineProps<{
   counts: { likes: number; comments: number; favorites: number; shares: number }
   label: (value: number) => string
 }>()
+
+// 与信息层一致的作者称呼：display_name 缺省时回落「用户 + 夜街号」，
+// 纯数字夜街号直接读出来认不出是谁（useFeed.ts 的约定）。
+const authorName = computed(() => props.item.author.display_name || `用户${props.item.author.handle}`)
 
 const emit = defineEmits<{
   like: []
@@ -94,7 +98,12 @@ onBeforeUnmount(() => {
 <template>
   <aside class="rail" aria-label="作品操作">
     <div class="avatar-wrap">
-      <img class="avatar" :src="props.avatar" :alt="`${props.item.author.handle} 的头像`" />
+      <NuxtLink
+        class="avatar-link" :to="`/creator/${props.item.author.handle}`"
+        :aria-label="`查看 ${authorName} 的主页`"
+      >
+        <img class="avatar" :src="props.avatar" :alt="`${props.item.author.handle} 的头像`" />
+      </NuxtLink>
       <button
         type="button" class="follow" :class="{ following: props.following }"
         :aria-label="props.following ? '已关注，点击取消' : '关注作者'"
@@ -192,7 +201,11 @@ onBeforeUnmount(() => {
   object-fit: cover;
   border: 2px solid var(--vp-im-text-primary);
   background: var(--vp-im-surface);
+  transition: border-color 160ms ease;
 }
+/* 头像整块是可点的链接，占满 50px 头像盒；hover 只把描边染成品牌粉，不加底框。 */
+.avatar-link { display: block; width: 100%; height: 100%; border-radius: 50%; cursor: pointer; }
+.avatar-link:hover .avatar { border-color: var(--vp-im-accent); }
 .follow {
   position: absolute;
   left: 50%;
