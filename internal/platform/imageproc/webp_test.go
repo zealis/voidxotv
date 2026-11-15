@@ -78,3 +78,46 @@ func TestMakeDisplayRejectsNonImage(t *testing.T) {
 		t.Fatal("非图片输入应当返回 ok=false")
 	}
 }
+
+func TestMakeAvatarFitsAndEncodes(t *testing.T) {
+	original := encodePNG(t, gradient(1200, 900))
+	out, ok := MakeAvatar(original)
+	if !ok {
+		t.Fatal("MakeAvatar 失败")
+	}
+	decoded, format, err := image.Decode(bytes.NewReader(out))
+	if err != nil {
+		t.Fatalf("头像无法解码: %v", err)
+	}
+	if format != "webp" {
+		t.Fatalf("头像格式 = %s，期望 webp", format)
+	}
+	if got := decoded.Bounds().Size(); got.X != AvatarMaxEdge || got.Y != 384 {
+		t.Fatalf("头像尺寸 = %v，期望 512x384（长边 512）", got)
+	}
+	if len(out) >= len(original) {
+		t.Fatalf("头像 %d 字节不小于原图 %d 字节", len(out), len(original))
+	}
+}
+
+func TestMakeAvatarNeverUpscales(t *testing.T) {
+	// 96px 的小图也要重编码成 WebP（存储里只有一种格式），但尺寸不变。
+	original := encodePNG(t, gradient(96, 96))
+	out, ok := MakeAvatar(original)
+	if !ok {
+		t.Fatal("MakeAvatar 失败")
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(out))
+	if err != nil {
+		t.Fatalf("头像无法解码: %v", err)
+	}
+	if got := decoded.Bounds().Size(); got.X != 96 || got.Y != 96 {
+		t.Fatalf("小头像尺寸 = %v，期望 96x96（不放大）", got)
+	}
+}
+
+func TestMakeAvatarRejectsNonImage(t *testing.T) {
+	if _, ok := MakeAvatar([]byte("not an image at all")); ok {
+		t.Fatal("非图片输入应当返回 ok=false")
+	}
+}

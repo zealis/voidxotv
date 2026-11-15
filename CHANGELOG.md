@@ -39,6 +39,26 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.32.3] - 2026-11-15
+
+### 改进
+
+- **用户头像统一转 WebP 保存，且只存这一份（不留原图）**：上传头像（`POST /api/v1/me/avatar`）、
+  随机头像 6 选 1（`POST /api/v1/me/avatar/random`）、注册默认头像三条写入路径
+  全部改为「解码 → 长边 ≤512 等比缩放（不放大）→ WebP 质量 85」，键一律
+  `avatars/<uid>/<时间戳>.webp`；回归样本里 1200×900 PNG 从 662 KiB 压到 12 KiB。
+  之前「WebP 上传缩放后转存 PNG」的分支删除；魔数通过但内容损坏的文件从
+  「原样保存」改为直接拒收（400），保证存储里只有一种格式。
+  - `internal/platform/imageproc/webp.go`：抽出 `Decode / Fit / EncodeAvatar`，
+    图集展示图与头像共用同一套缩放与编码；新增 `MakeAvatar`。
+  - `internal/modules/settings/avatarscale.go`：`scaleAvatar` 重写为 `toWebPAvatar`。
+  - `internal/platform/avatar/dicebear.go`：`Key` 改为 `.webp`；默认头像转码
+    失败时回落存 PNG（键随之改后缀），不让「没有默认头像」更糟。
+  - 已存的旧头像（PNG / JPG）维持原样继续可用，不做存量转码。
+- `.tools/headless-test/m98-avatar-webp.js`：15 项全过（默认 / 上传 / 随机头像
+  键都是 `.webp`、对象是 `image/webp`、662 KiB→12 KiB、换头像后键版本化更新、
+  损坏图片 400）。
+
 ## [0.32.2] - 2026-11-15
 
 ### 修复

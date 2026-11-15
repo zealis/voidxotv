@@ -315,18 +315,22 @@ func (h *Handler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, ErrBadAvatar)
 		return
 	}
-	ext, mime, ok := avatarFormat(http.DetectContentType(data))
-	if !ok {
+	// 魔数先挡一道：只收 png / jpeg / webp，text 等杂项直接拒，转码阶段再细化校验。
+	if _, _, ok := avatarFormat(http.DetectContentType(data)); !ok {
 		h.fail(w, r, ErrBadAvatar)
 		return
 	}
-	// 上传时缩放到 ≤512px 长边（§11.2）：展示位最大 96px×2，原图直存浪费带宽。
-	// WebP 缩放后转存为 PNG，键与 MIME 随之改变。
-	data, mime, ext, resized := scaleAvatar(data, mime, ext, h.log)
+	// 头像一律转成长边 ≤512 的 WebP 且只存这一份（§11.2）：展示位最大 96px×2，
+	// 原图直存浪费带宽；解码失败的文件直接拒收，不写对象存储。
+	data, resized, err := toWebPAvatar(data)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
 	ctx := r.Context()
 	// 版本化键：覆盖头像后旧图不会被 CDN 缓存命中。
-	key := fmt.Sprintf("avatars/%d/%d.%s", principal.UserID, time.Now().UnixNano(), ext)
-	if err := h.store.PutBytes(ctx, key, data, mime, "public, max-age=31536000, immutable"); err != nil {
+	key := fmt.Sprintf("avatars/%d/%d.webp", principal.UserID, time.Now().UnixNano())
+	if err := h.store.PutBytes(ctx, key, data, "image/webp", "public, max-age=31536000, immutable"); err != nil {
 		h.log.Warn("settings: put avatar", "error", err)
 		h.fail(w, r, ErrStorageDown)
 		return

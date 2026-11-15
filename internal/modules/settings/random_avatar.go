@@ -12,6 +12,7 @@ import (
 	"github.com/yejie/voidxotv/internal/modules/auth"
 	"github.com/yejie/voidxotv/internal/platform/avatar"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
+	"github.com/yejie/voidxotv/internal/platform/imageproc"
 )
 
 // SetRandomAvatar 返回新的签名头像地址；任何失败都不会留下无人引用的对象。
@@ -26,8 +27,13 @@ func (h *Handler) SetRandomAvatar(ctx context.Context, userID int64, seed string
 	if err != nil {
 		return "", fmt.Errorf("%w: 头像获取失败", ErrStorageDown)
 	}
+	// 随机头像与上传头像同口径：转成长边 ≤512 的 WebP 存一份，不留 PNG 原图。
+	webp, ok := imageproc.MakeAvatar(data)
+	if !ok {
+		return "", fmt.Errorf("%w: 头像转码失败", ErrStorageDown)
+	}
 	key := avatar.Key(userID)
-	if err := h.store.PutBytes(ctx, key, data, "image/png", avatar.CacheHeader); err != nil {
+	if err := h.store.PutBytes(ctx, key, webp, "image/webp", avatar.CacheHeader); err != nil {
 		return "", ErrStorageDown
 	}
 	old, err := h.repo.AvatarKey(ctx, userID)

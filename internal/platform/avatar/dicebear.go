@@ -50,8 +50,9 @@ func SourceURL(seed string) string {
 }
 
 // Key 与 settings 上传头像的命名一致：删旧头像、覆盖头像都命中同一命名空间。
+// 头像统一转 WebP 存储（上传与随机头像同口径），键一律 .webp。
 func Key(userID int64) string {
-	return fmt.Sprintf("avatars/%d/%d.png", userID, time.Now().UnixNano())
+	return fmt.Sprintf("avatars/%d/%d.webp", userID, time.Now().UnixNano())
 }
 
 // FetchPNG 下载并校验一张头像。调用方负责把它存进对象存储；本包不落盘。

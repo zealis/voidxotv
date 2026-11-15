@@ -9,9 +9,11 @@ package auth
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/yejie/voidxotv/internal/platform/avatar"
+	"github.com/yejie/voidxotv/internal/platform/imageproc"
 )
 
 // AssignTTL 供注册接口给异步任务单独设超时（不能用请求 context）。
@@ -50,9 +52,14 @@ func (d *DefaultAvatar) Assign(ctx context.Context, userID int64, handle string)
 		return
 	}
 
-	key := avatar.Key(userID)
-	if err := d.store.PutBytes(ctx, key, data, "image/png", avatar.CacheHeader); err != nil {
-		d.log.Warn("default avatar: store failed", "handle", handle, "error", err)
+	// 默认头像与上传头像同口径：转成长边 ≤512 的 WebP 存一份，不留 PNG 原图。
+	// DiceBear 偶发抽风转码失败时回落存 PNG（键随之改后缀），别让「没有默认头像」更糟。
+	stored, mime, key := data, "image/png", strings.Replace(avatar.Key(userID), ".webp", ".png", 1)
+	if webp, ok := imageproc.MakeAvatar(data); ok {
+		stored, mime, key = webp, "image/webp", avatar.Key(userID)
+	}
+	if err := d.store.PutBytes(ctx, key, stored, mime, avatar.CacheHeader); err != nil {
+		d.log.Warn("default avatar: store failed", "error", err)
 		return
 	}
 	written, err := d.repo.SetDefaultAvatarKey(ctx, userID, key)
