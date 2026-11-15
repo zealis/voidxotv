@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/yejie/voidxotv/internal/modules/auth"
+	"github.com/yejie/voidxotv/internal/modules/spam"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 )
 
@@ -119,6 +120,16 @@ func (h *Handler) manage(w http.ResponseWriter, r *http.Request) {
 	var input ManageInput
 	if err := httpserver.DecodeJSON(r, &input); err != nil {
 		h.writeError(w, r, err)
+		return
+	}
+	fields := make([]spam.Field, 0, 2)
+	if input.Title != nil {
+		fields = append(fields, spam.Field{Label: "标题", Value: *input.Title})
+	}
+	if input.Description != nil {
+		fields = append(fields, spam.Field{Label: "作品简介", Value: *input.Description})
+	}
+	if spam.Guard(w, r, fields...) {
 		return
 	}
 	id, ok := pathID(w, r)

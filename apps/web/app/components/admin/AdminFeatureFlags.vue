@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 功能开关（§4.7）：目前只有「GIF 表情包」一项。
 // 图源密钥只存服务端：评论区的 GIF 搜索走本站代理，浏览器永远拿不到 id/key。
-import { ElButton, ElInput, ElMessage, ElOption, ElSelect } from 'element-plus'
+import { ElButton, ElInput, ElMessage, ElOption, ElSelect, ElSwitch } from 'element-plus'
 
 interface GifConfig {
   provider: string
@@ -71,7 +71,97 @@ async function save() {
   }
 }
 
-onMounted(load)
+interface SpamConfig {
+  enabled: boolean
+  words: string
+  lexicon_name: string
+  lexicon_words: number
+  lexicon_at: string
+  installed: boolean
+}
+
+interface SpamTestResult {
+  enabled: boolean
+  blocked: boolean
+  hits: string[]
+}
+
+const spam = reactive<SpamConfig>({
+  enabled: false, words: '', lexicon_name: '', lexicon_words: 0,
+  lexicon_at: '', installed: false,
+})
+const spamError = ref('')
+const spamSaving = ref(false)
+const downloading = ref(false)
+const testText = ref('')
+const testBusy = ref(false)
+const testResult = ref<SpamTestResult | null>(null)
+
+const adminReason = (cause: unknown) =>
+  cause instanceof Error ? cause.message : '操作失败，请稍后再试'
+
+async function loadSpam() {
+  try {
+    const data = await request<{ config: SpamConfig }>('/api/v1/admin/settings/spam')
+    Object.assign(spam, data.config)
+    spamError.value = ''
+  } catch (cause) {
+    spamError.value = adminReason(cause)
+  }
+}
+
+async function saveSpam() {
+  if (spamSaving.value) return
+  spamSaving.value = true
+  spamError.value = ''
+  try {
+    const data = await request<{ config: SpamConfig }>('/api/v1/admin/settings/spam', {
+      method: 'PUT', csrf: true, body: { enabled: spam.enabled, words: spam.words },
+    })
+    Object.assign(spam, data.config)
+    ElMessage.success(spam.enabled ? '已保存，过滤已生效' : '已保存')
+  } catch (cause) {
+    spamError.value = adminReason(cause)
+    ElMessage.error(spamError.value)
+  } finally {
+    spamSaving.value = false
+  }
+}
+
+async function downloadLexicon() {
+  if (downloading.value) return
+  downloading.value = true
+  spamError.value = ''
+  try {
+    const data = await request<{ config: SpamConfig }>('/api/v1/admin/settings/spam/lexicon', {
+      method: 'POST', body: {}, csrf: true,
+    })
+    Object.assign(spam, data.config)
+    ElMessage.success('词库已下载')
+  } catch (cause) {
+    spamError.value = adminReason(cause)
+    ElMessage.error(spamError.value)
+  } finally {
+    downloading.value = false
+  }
+}
+
+async function runSpamTest() {
+  if (testBusy.value || !testText.value.trim()) return
+  testBusy.value = true
+  spamError.value = ''
+  try {
+    testResult.value = await request<SpamTestResult>('/api/v1/admin/settings/spam/test', {
+      method: 'POST', body: { text: testText.value }, csrf: true,
+    })
+  } catch (cause) {
+    spamError.value = adminReason(cause)
+  } finally {
+    testBusy.value = false
+  }
+}
+
+onMounted(() => { void load(); void loadSpam() })
 </script>
 
 <template>
@@ -154,6 +244,63 @@ onMounted(load)
       </div>
       <p v-else class="hint">当前角色只有查看权限。</p>
     </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <strong>垃圾信息控制</strong>
+        <span class="state" :class="{ on: spam.enabled }">{{ spam.enabled ? '已启用' : '未启用' }}</span>
+      </div>
+
+      <p v-if="spamError" class="error">{{ spamError }}</p>
+
+      <div class="form">
+        <div class="switch-row">
+          <span>启用过滤</span>
+          <ElSwitch v-model="spam.enabled" :disabled="!writable" />
+        </div>
+
+        <label>自定义敏感词</label>
+        <ElInput
+          v-model="spam.words" type="textarea" :rows="5" maxlength="4000"
+          placeholder="一行一个" :disabled="!writable"
+        />
+
+        <label>词库</label>
+        <div class="lexicon">
+          <span v-if="spam.installed">
+            {{ spam.lexicon_name }} · {{ spam.lexicon_words.toLocaleString() }} 条词
+            <template v-if="spam.lexicon_at">
+              · {{ new Date(spam.lexicon_at).toLocaleDateString('zh-CN') }}
+            </template>
+          </span>
+          <span v-else>尚未下载</span>
+        </div>
+        <div class="actions">
+          <ElButton :loading="downloading" :disabled="!writable || downloading" @click="downloadLexicon">
+            下载词库
+          </ElButton>
+        </div>
+
+        <label>测试</label>
+        <ElInput v-model="testText" placeholder="输入一段文字" maxlength="500" />
+        <div class="actions">
+          <ElButton :loading="testBusy" :disabled="!testText.trim() || testBusy" @click="runSpamTest">
+            测试
+          </ElButton>
+        </div>
+        <p v-if="testResult" class="test-result" :class="{ blocked: testResult.blocked }">
+          {{ testResult.blocked
+            ? `将拒绝提交（命中：${testResult.hits.join('、')}）`
+            : (testResult.enabled ? '可以提交' : '过滤未启用，可以提交') }}
+        </p>
+      </div>
+
+      <div v-if="writable" class="actions">
+        <ElButton type="primary" :loading="spamSaving" @click="saveSpam">保存</ElButton>
+        <ElButton :disabled="spamSaving" @click="loadSpam">重新读取</ElButton>
+      </div>
+      <p v-else class="hint">当前角色只有查看权限。</p>
+    </div>
   </section>
 </template>
 
@@ -185,5 +332,12 @@ onMounted(load)
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .two > div { display: grid; gap: 6px; }
 .actions { display: flex; gap: 8px; }
+.switch-row {
+  display: flex; align-items: center; justify-content: space-between;
+  max-width: 560px; font-size: 13px; color: #f4f4f5;
+}
+.lexicon { font-size: 12px; color: #d4d4d8; }
+.test-result { margin: 0; font-size: 12px; color: #4ade80; }
+.test-result.blocked { color: #ff6961; }
 .error { margin: 0; font-size: 12px; color: #ff6961; }
 </style>

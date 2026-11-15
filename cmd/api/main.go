@@ -28,6 +28,7 @@ import (
 	"github.com/yejie/voidxotv/internal/modules/search"
 	"github.com/yejie/voidxotv/internal/modules/seo"
 	"github.com/yejie/voidxotv/internal/modules/settings"
+	"github.com/yejie/voidxotv/internal/modules/spam"
 	"github.com/yejie/voidxotv/internal/modules/stats"
 	"github.com/yejie/voidxotv/internal/modules/upload"
 	"github.com/yejie/voidxotv/internal/platform/buildinfo"
@@ -66,6 +67,10 @@ func run() error {
 		return err
 	}
 	defer cacheStore.Close()
+
+	// 垃圾信息控制：启动时装配词表（开关关闭 / 词库未下载时一律放行）。
+	// 后台保存配置或下载词库会立即 Reload，多实例之间另有 30 秒轮询兜底。
+	spam.Init(ctx, db)
 
 	// Modules are assembled here; they never construct their own connections.
 	authRepository := auth.NewRepository(db)

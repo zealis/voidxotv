@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/yejie/voidxotv/internal/modules/auth"
+	"github.com/yejie/voidxotv/internal/modules/spam"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 	"github.com/yejie/voidxotv/internal/platform/objectstore"
 )
@@ -133,6 +134,16 @@ func (h *Handler) patchProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if request.DisplayName == nil && request.Bio == nil {
 		h.fail(w, r, fmt.Errorf("%w：没有需要更新的字段", ErrInvalidInput))
+		return
+	}
+	fields := make([]spam.Field, 0, 2)
+	if request.DisplayName != nil {
+		fields = append(fields, spam.Field{Label: "昵称", Value: *request.DisplayName})
+	}
+	if request.Bio != nil {
+		fields = append(fields, spam.Field{Label: "个人简介", Value: *request.Bio})
+	}
+	if spam.Guard(w, r, fields...) {
 		return
 	}
 	principal, _ := auth.PrincipalFromContext(r.Context())

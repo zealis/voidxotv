@@ -80,6 +80,15 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		h.wrap(PermSettingsRead, false, h.gifConfig))
 	mux.Handle("PUT /api/v1/admin/settings/gif",
 		h.wrap(PermSettingsWrite, true, h.updateGifConfig))
+	// 垃圾信息控制：开关 / 自定义词、按需下载唯一一份词库、文本测试。
+	mux.Handle("GET /api/v1/admin/settings/spam",
+		h.wrap(PermSettingsRead, false, h.spamConfig))
+	mux.Handle("PUT /api/v1/admin/settings/spam",
+		h.wrap(PermSettingsWrite, true, h.updateSpamConfig))
+	mux.Handle("POST /api/v1/admin/settings/spam/lexicon",
+		h.wrap(PermSettingsWrite, true, h.downloadSpamLexicon))
+	mux.Handle("POST /api/v1/admin/settings/spam/test",
+		h.wrap(PermSettingsRead, false, h.testSpam))
 
 	// 账号与权限（§4.7）：只有超管能看/改，改完吊销目标会话强制重新登录。
 	mux.Handle("GET /api/v1/admin/accounts", h.wrap(PermAccountRead, false, h.accounts))

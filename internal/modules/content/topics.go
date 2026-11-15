@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/yejie/voidxotv/internal/modules/auth"
+	"github.com/yejie/voidxotv/internal/modules/spam"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 )
 
@@ -310,6 +311,9 @@ func (h *Handler) createUserTopic(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := httpserver.DecodeJSON(r, &request); err != nil {
 		h.writeError(w, r, err)
+		return
+	}
+	if spam.Guard(w, r, spam.Field{Label: "话题名称", Value: request.Name}) {
 		return
 	}
 	principal, _ := auth.PrincipalFromContext(r.Context())

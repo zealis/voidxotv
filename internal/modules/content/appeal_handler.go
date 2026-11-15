@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/yejie/voidxotv/internal/modules/auth"
+	"github.com/yejie/voidxotv/internal/modules/spam"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 )
 
@@ -20,6 +21,9 @@ func (h *Handler) appeal(w http.ResponseWriter, r *http.Request) {
 	var request appealRequest
 	if err := httpserver.DecodeJSON(r, &request); err != nil {
 		h.writeError(w, r, err)
+		return
+	}
+	if spam.Guard(w, r, spam.Field{Label: "申诉理由", Value: request.Reason}) {
 		return
 	}
 	principal, _ := auth.PrincipalFromContext(r.Context())

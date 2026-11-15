@@ -604,7 +604,8 @@ function isMine(item: { user_id: number; id: number }): boolean {
             </div>
           </div>
         </div>
-        <p v-if="postFailed" class="failed-hint" role="status">发送失败，草稿已保留，可重试。</p>
+        <!-- 服务端给了具体理由（例如内容被拒）时只显示那一条，别再叠一句笼统的「发送失败」。 -->
+        <p v-if="postFailed && !notice" class="failed-hint" role="status">发送失败，草稿已保留，可重试。</p>
       </form>
     </section>
     <ReportDialog

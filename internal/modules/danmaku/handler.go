@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yejie/voidxotv/internal/modules/admin"
 	"github.com/yejie/voidxotv/internal/modules/auth"
+	"github.com/yejie/voidxotv/internal/modules/spam"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 )
 
@@ -125,6 +126,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	if request.TimeMS < 0 || request.TimeMS > maxTimeMS {
 		h.fail(w, r, fmt.Errorf("%w: 弹幕时间点无效", admin.ErrInvalidInput))
+		return
+	}
+	if spam.Guard(w, r, spam.Field{Label: "弹幕", Value: body}) {
 		return
 	}
 	// 只给已发布且可播放的视频发弹幕，避免给草稿 / 下架内容写数据。

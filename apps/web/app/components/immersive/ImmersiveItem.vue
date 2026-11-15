@@ -3,7 +3,7 @@
 // 播放器悬浮控件。画面之上没有任何玻璃遮罩（UI 规范 §4.2 / §5.1）。
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { FeedItem } from '~/composables/useFeed'
-import { ApiError } from '~/composables/useApi'
+import { ApiError, errorMessage } from '~/composables/useApi'
 
 interface PlayerView {
   playing: boolean
@@ -187,8 +187,8 @@ async function sendDanmaku() {
       openAuthDialog('login', { reason: '登录后即可发弹幕' })
       return
     }
-    // 失败保留草稿，给一句可操作提示（开发信息不进界面）。
-    emit('notice', '弹幕发送失败，请稍后重试')
+    // 失败保留草稿；服务端给的是可操作提示（含不当用语被拒时要原样告诉用户）。
+    emit('notice', errorMessage(error))
   }
 }
 

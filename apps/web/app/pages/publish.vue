@@ -140,7 +140,8 @@ async function saveDraft(force = false): Promise<boolean> {
     draftStatus.value = '草稿已保存'
     return true
   } catch (error) {
-    draftStatus.value = `草稿保存失败：${errorMessage(error)}`
+    // 内容被拒时直接展示服务端理由，别套「保存失败」把真实原因盖住。
+    draftStatus.value = errorMessage(error)
     return false
   } finally {
     savingDraft.value = false

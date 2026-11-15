@@ -24,6 +24,7 @@ import (
 	"github.com/yejie/voidxotv/internal/modules/auth"
 	"github.com/yejie/voidxotv/internal/modules/gifs"
 	"github.com/yejie/voidxotv/internal/modules/notifications"
+	"github.com/yejie/voidxotv/internal/modules/spam"
 	"github.com/yejie/voidxotv/internal/modules/stats"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 	"github.com/yejie/voidxotv/internal/platform/nightid"
@@ -543,6 +544,14 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// 表情包标记里的地址不是用户输入的文字，审核前剔除，避免把图源 URL 当正文。
+	clean := body
+	for _, raw := range gifs.Markers(body) {
+		clean = strings.ReplaceAll(clean, gifs.Marker(raw), "")
+	}
+	if spam.Guard(w, r, spam.Field{Label: "评论", Value: clean}) {
+		return
+	}
 	principal, _ := auth.PrincipalFromContext(r.Context())
 
 	// 回复压平到顶层：parent 必须是同内容的可见评论；
@@ -702,6 +711,9 @@ func (h *Handler) submitReport(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := httpserver.DecodeJSON(r, &request); err != nil {
 		h.fail(w, r, err)
+		return
+	}
+	if spam.Guard(w, r, spam.Field{Label: "举报说明", Value: request.Detail}) {
 		return
 	}
 	principal, _ := auth.PrincipalFromContext(r.Context())

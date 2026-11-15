@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yejie/voidxotv/internal/modules/auth"
+	"github.com/yejie/voidxotv/internal/modules/spam"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
 	"github.com/yejie/voidxotv/internal/platform/objectstore"
 )
@@ -64,6 +65,22 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	h.registerCoverRoutes(mux)
 }
 
+// poiSpamFields 从 POI 的原始 JSON 里取出用户自由输入的位置名称与地址。
+// 经纬度是数字、格式合法性由 Service.NormalizePOI 负责，审核不重复报错。
+func poiSpamFields(raw json.RawMessage) []spam.Field {
+	if len(raw) == 0 {
+		return nil
+	}
+	var poi POIObject
+	if err := json.Unmarshal(raw, &poi); err != nil {
+		return nil
+	}
+	return []spam.Field{
+		{Label: "位置名称", Value: poi.Name},
+		{Label: "位置地址", Value: poi.Address},
+	}
+}
+
 type createRequest struct {
 	Type        string `json:"type"`
 	Title       string `json:"title"`
@@ -74,6 +91,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var request createRequest
 	if err := httpserver.DecodeJSON(r, &request); err != nil {
 		h.writeError(w, r, err)
+		return
+	}
+	if spam.Guard(w, r,
+		spam.Field{Label: "标题", Value: request.Title},
+		spam.Field{Label: "作品简介", Value: request.Description}) {
 		return
 	}
 	principal, _ := auth.PrincipalFromContext(r.Context())
@@ -105,6 +127,14 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	fields := []spam.Field{
+		{Label: "标题", Value: request.Title},
+		{Label: "作品简介", Value: request.Description},
+	}
+	fields = append(fields, poiSpamFields(request.POI)...)
+	if spam.Guard(w, r, fields...) {
+		return
+	}
 	principal, _ := auth.PrincipalFromContext(r.Context())
 	content, err := h.svc.UpdateDraft(r.Context(), id, principal.UserID, UpdateDraftInput{
 		Title: request.Title, Description: request.Description,
@@ -132,6 +162,9 @@ func (h *Handler) publish(w http.ResponseWriter, r *http.Request) {
 	}
 	id, ok := pathID(w, r)
 	if !ok {
+		return
+	}
+	if spam.Guard(w, r, poiSpamFields(request.POI)...) {
 		return
 	}
 	principal, _ := auth.PrincipalFromContext(r.Context())
