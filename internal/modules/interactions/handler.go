@@ -517,6 +517,22 @@ func mentionedHandles(body string) []string {
 	return handles
 }
 
+// maxCommentRunes 是评论 / 回复的可见字符上限：标点与单个表情各算 1，
+// GIF 标记整体算 1（用户看到的就是一张图），不让长标记吃掉额度。
+const maxCommentRunes = 140
+
+func commentLength(body string) int {
+	markers := gifs.Markers(body)
+	if len(markers) == 0 {
+		return utf8.RuneCountInString(body)
+	}
+	plain := body
+	for _, raw := range markers {
+		plain = strings.ReplaceAll(plain, gifs.Marker(raw), "")
+	}
+	return utf8.RuneCountInString(strings.TrimSpace(plain)) + len(markers)
+}
+
 func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 	id, err := contentID(r)
 	if err != nil {
@@ -532,8 +548,8 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := strings.TrimSpace(request.Body)
-	if body == "" || utf8.RuneCountInString(body) > 500 {
-		h.fail(w, r, admin.ErrInvalidInput)
+	if body == "" || commentLength(body) > maxCommentRunes {
+		h.fail(w, r, fmt.Errorf("%w: 评论最多 %d 字", admin.ErrInvalidInput, maxCommentRunes))
 		return
 	}
 	// GIF 标记里的地址只能是集成过的图源（apihz / klipy）：评论正文会被渲染成 <img>，

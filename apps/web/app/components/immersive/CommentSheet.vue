@@ -59,6 +59,18 @@ const draft = ref('')
 const sentDraft = ref('')
 // 待发送的 GIF：选图后先挂在输入框上方预览，发送时和文字一起提交（正文里存 [[gif:url]]）。
 const pendingGif = ref('')
+// 评论 / 回复最多 140 个可见字符：标点与单个表情各算 1，待发送的 GIF 也占 1。
+const MAX_COMMENT_CHARS = 140
+const maxDraftChars = computed(() => MAX_COMMENT_CHARS - (pendingGif.value ? 1 : 0))
+
+// 输入框不能用原生 maxlength：它按 UTF-16 计，一个表情会被算成 2 个字符。
+// 这里按码位截断，与后端 commentLength 的口径一致。
+function clampDraft() {
+  const chars = [...draft.value]
+  if (chars.length > maxDraftChars.value) {
+    draft.value = chars.slice(0, maxDraftChars.value).join('')
+  }
+}
 const postFailed = ref(false)
 const notice = ref('')
 const replyTo = ref<{ id: number; name: string } | null>(null)
@@ -213,6 +225,8 @@ function authorName(item: { handle: string; display_name?: string }): string {
 function onPickGif(url: string) {
   if (!url) return
   pendingGif.value = url
+  // GIF 占 1 个字符：已经写到 140 字时先裁到 139，避免发送时才被拒。
+  clampDraft()
   emojiOpen.value = false
   input.value?.focus()
 }
@@ -336,10 +350,10 @@ function toggleEmoji() {
 }
 
 // 插到光标处而不是末尾：用户可能先写了字、再回来补表情。
-// 输入框 maxlength=200，直接赋值不受它约束，所以这里自己挡一道。
+// 直接赋值不受输入框长度约束，所以这里按可见字符数自己挡一道。
 function insertEmoji(char: string) {
   const element = input.value
-  if (draft.value.length + char.length > 200) return
+  if ([...draft.value].length + [...char].length > maxDraftChars.value) return
   if (!element) {
     draft.value += char
     return
@@ -582,7 +596,7 @@ function isMine(item: { user_id: number; id: number }): boolean {
         <div class="row">
           <div class="input-wrap">
             <input
-              ref="input" v-model="draft" type="text" maxlength="200"
+              ref="input" v-model="draft" type="text" @input="clampDraft"
               :placeholder="replyTo ? `回复 @${replyTo.name}…` : '说点什么…'"
               aria-label="评论内容"
             />
