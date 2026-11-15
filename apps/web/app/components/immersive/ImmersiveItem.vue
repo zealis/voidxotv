@@ -3,6 +3,7 @@
 // 播放器悬浮控件。画面之上没有任何玻璃遮罩（UI 规范 §4.2 / §5.1）。
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { FeedItem } from '~/composables/useFeed'
+import { ApiError } from '~/composables/useApi'
 
 interface PlayerView {
   playing: boolean
@@ -83,19 +84,75 @@ const flash = ref<'' | 'play' | 'pause' | 'like'>('')
 //   cover 会重裁（手机横屏源裁 ~70% / 桌面竖屏源裁上下过半），黑边可接受。
 // SSR 阶段默认竖屏比例（产品主形态）。
 const viewportRatio = ref(1.78)
-// 弹幕（UI 评审阶段为本地弹幕；后端持久化后接入列表拉取与发送）
+// 弹幕已持久化到后端：挂载时按内容拉取，播放到对应时间点逐条触发，
+// 视频 loop 回绕后重新播放，刷新页面重新拉取，不再依赖组件内存。
+const { api } = useApi()
+const { open: openAuthDialog } = useAuthDialog()
+
+interface DanmakuItem {
+  id: number
+  text: string
+  timeMs: number
+  lane: number
+}
+
 const danmakuOn = ref(true)
 const danmakuInput = ref('')
 const danmakuInputEl = ref<HTMLInputElement | null>(null)
 const danmakuEmojiOpen = ref(false)
-const danmakuList = ref<{ id: number; bornAt: number; text: string; lane: number }[]>([])
+const danmakuList = ref<DanmakuItem[]>([])
+const danmakuPlaying = ref<{ key: number; item: DanmakuItem; bornAt: number }[]>([])
+const danmakuLoaded = ref(false)
 let danmakuSeq = 0
-const danmakuActive = computed(() => {
-  // 依赖 currentTime 让播放中持续重算；窗口用真实时钟——
-  // 短视频 loop 回绕时，按视频时间轴算会让刚发的弹幕立刻消失。
-  void props.player.currentTime
+let lastDanmakuMs = -1
+const firedDanmaku = new Set<number>()
+
+function fireDanmaku(item: DanmakuItem) {
+  danmakuPlaying.value.push({ key: ++danmakuSeq, item, bornAt: Date.now() })
+}
+
+async function loadDanmaku() {
+  if (danmakuLoaded.value || props.item.type !== 'video' || typeof window === 'undefined') return
+  danmakuLoaded.value = true
+  try {
+    const data = await api<{ items: { id: number; body: string; time_ms: number }[] }>(
+      `/api/v1/contents/${props.item.id}/danmaku`,
+    )
+    danmakuList.value = (data?.items || []).map((entry, index) => ({
+      id: entry.id, text: entry.body, timeMs: entry.time_ms, lane: index % 6,
+    }))
+  } catch {
+    danmakuLoaded.value = false // 下次激活时重试
+  }
+}
+
+watch(() => props.active, (active) => {
+  if (active) void loadDanmaku()
+}, { immediate: true })
+
+// 按视频时间轴触发：只处理这一帧跨过的时间区间，seek 跳跃过大时跳过；
+// loop 回绕（currentTime 变小）清空触发标记，下一轮重新播放同一批弹幕。
+watch(() => props.player.currentTime, (seconds) => {
+  const nowMs = Math.round((seconds || 0) * 1000)
   const now = Date.now()
-  return danmakuList.value.filter((b) => now - b.bornAt < 8000)
+  if (danmakuPlaying.value.some((entry) => now - entry.bornAt >= 8000)) {
+    danmakuPlaying.value = danmakuPlaying.value.filter((entry) => now - entry.bornAt < 8000)
+  }
+  if (nowMs < lastDanmakuMs) {
+    firedDanmaku.clear()
+    lastDanmakuMs = -1
+    return
+  }
+  const span = nowMs - lastDanmakuMs
+  lastDanmakuMs = nowMs
+  if (!props.active || !danmakuOn.value || props.item.type !== 'video' || span > 2000) return
+  for (const item of danmakuList.value) {
+    if (firedDanmaku.has(item.id)) continue
+    if (item.timeMs <= nowMs && item.timeMs >= nowMs - span) {
+      firedDanmaku.add(item.id)
+      fireDanmaku(item)
+    }
+  }
 })
 
 function fmtTime(seconds: number): string {
@@ -107,12 +164,32 @@ function fmtTime(seconds: number): string {
   return `${min}:${sec}`
 }
 
-function sendDanmaku() {
+async function sendDanmaku() {
   const text = danmakuInput.value.trim().slice(0, 30)
   if (!text) return
-  danmakuList.value.push({ id: Date.now(), bornAt: Date.now(), text, lane: danmakuList.value.length % 6 })
-  danmakuInput.value = ''
-  danmakuEmojiOpen.value = false
+  const timeMs = Math.max(0, Math.round(props.player.currentTime * 1000))
+  try {
+    const data = await api<{ item: { id: number; body: string; time_ms: number } }>(
+      `/api/v1/contents/${props.item.id}/danmaku`,
+      { method: 'POST', body: { body: text, time_ms: timeMs } },
+    )
+    const item: DanmakuItem = {
+      id: data.item.id, text: data.item.body, timeMs: data.item.time_ms,
+      lane: danmakuList.value.length % 6,
+    }
+    danmakuList.value.push(item)
+    firedDanmaku.add(item.id) // 本轮已经立即显示，别再按时间轴触发一次
+    fireDanmaku(item)
+    danmakuInput.value = ''
+    danmakuEmojiOpen.value = false
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      openAuthDialog('login', { reason: '登录后即可发弹幕' })
+      return
+    }
+    // 失败保留草稿，给一句可操作提示（开发信息不进界面）。
+    emit('notice', '弹幕发送失败，请稍后重试')
+  }
 }
 
 function toggleDanmaku() {
@@ -265,6 +342,12 @@ watch(() => props.item.id, () => {
   openPop.value = ''
   closeMobileDanmaku()
   stopGallery()
+  danmakuList.value = []
+  danmakuPlaying.value = []
+  danmakuLoaded.value = false
+  firedDanmaku.clear()
+  lastDanmakuMs = -1
+  if (props.active) void loadDanmaku()
 })
 
 onBeforeUnmount(() => {
@@ -388,9 +471,9 @@ function onSeek(event: MouseEvent) {
     <!-- 弹幕层：滚动弹幕覆盖在画面上（弹开关控制显示） -->
     <div v-if="danmakuOn" class="danmaku-layer" aria-hidden="true">
       <span
-        v-for="b in danmakuActive" :key="b.id" class="danmaku"
-        :style="{ top: `${(b.lane % 6) * 36 + 88}px` }"
-      >{{ b.text }}</span>
+        v-for="entry in danmakuPlaying" :key="entry.key" class="danmaku"
+        :style="{ top: `${(entry.item.lane % 6) * 36 + 88}px` }"
+      >{{ entry.item.text }}</span>
     </div>
 
     <!-- 播放控制条（§6.4）：视频与底栏之间常显；倍速 / 清晰度 / 音量都收在这一条上。 -->
@@ -892,6 +975,13 @@ function onSeek(event: MouseEvent) {
   cursor: pointer;
 }
 .pb-face:hover, .pb-face.on { color: var(--vp-im-text-primary); }
+/* 表情按钮在输入区最左端，面板要贴着它上方展开。EmojiPanel 默认 right:0
+   是给评论的窄锚点准备的；这里 .pb-input 有几百 px，靠右挂会离按钮很远。 */
+.pb-input :deep(.emoji-panel) {
+  left: 0;
+  right: auto;
+  width: min(340px, calc(100vw - 40px));
+}
 .pb-input input {
   flex: 1;
   min-width: 0;

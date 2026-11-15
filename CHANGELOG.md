@@ -39,6 +39,37 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.26.0] - 2026-11-15
+
+### 新增
+
+- **弹幕持久化（表 + 接口 + 前端接入）**：此前弹幕只存在组件内存里，
+  `danmakuActive` 只保留 8 秒内条目，滚一次就移除、刷新清空。
+  - `migrations/000021_danmaku.*`：新增 `danmaku` 表（content_id / user_id / body /
+    time_ms / created_at）与 `(content_id, time_ms, id)` 索引；`time_ms` 记录发送时
+    的视频播放位置。
+  - `internal/modules/danmaku/handler.go`：`GET /api/v1/contents/{id}/danmaku`
+    公开按时间点返回（上限 500 条）；`POST` 走登录 + CSRF，正文限 30 字、
+    时间点上限 24h，只允许给已发布可播放的视频写。路由经
+    `internal/app/router.go` 的 `Dependencies.Danmaku` 注入。
+  - `ImmersiveItem.vue`：激活时拉取，发送入库后本地立即显示；把 8 秒内存窗口改成
+    按 `player.currentTime` 跨过的时间区间逐条触发，视频 loop 回绕清空触发标记后
+    重新播放，过期弹幕在下一帧清理，切换内容时重置列表与游标。401 用登录弹窗提示，
+    其它失败保留草稿并给一句可操作提示。
+  - 发弹幕需要登录（与点赞 / 评论同一口径）；未登录点发送提示「登录后即可发弹幕」。
+  - `.tools/headless-test/m76-danmaku-persist.js`：插一条临时弹幕验证 GET 200、
+    首次加载与刷新后都出现、两次接口请求、POST 未登录 401；跑完删除并核对
+    `danmaku` 表回到 0 条。
+
+### 修复
+
+- **功能条表情面板离表情按钮太远**：`EmojiPanel` 的 `right: 0` 是为评论的窄锚点
+  准备的，挂到几百 px 宽的 `.pb-input` 上会贴到输入区最右端。
+  `ImmersiveItem.vue` 加 `.pb-input :deep(.emoji-panel) { left: 0; right: auto }`
+  让面板左对齐输入区、正好浮在表情按钮上方。
+  - `m75-danmaku-emoji.js` 加两条断言：面板左边缘与表情按钮差 ≤20px、
+    面板不再贴输入区右端，共 20 项全过。
+
 ## [0.25.0] - 2026-11-15
 
 ### 新增

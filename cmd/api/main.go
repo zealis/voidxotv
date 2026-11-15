@@ -18,6 +18,7 @@ import (
 	"github.com/yejie/voidxotv/internal/modules/admin"
 	"github.com/yejie/voidxotv/internal/modules/auth"
 	"github.com/yejie/voidxotv/internal/modules/content"
+	"github.com/yejie/voidxotv/internal/modules/danmaku"
 	"github.com/yejie/voidxotv/internal/modules/delivery"
 	"github.com/yejie/voidxotv/internal/modules/feed"
 	"github.com/yejie/voidxotv/internal/modules/gifs"
@@ -88,6 +89,8 @@ func run() error {
 	interactionsHandler := interactions.NewHandler(db,
 		stats.NewCounters(cacheStore.Client()), authHandler, adminRepo, log)
 	notificationsHandler := notifications.NewHandler(db, authHandler, log)
+	// 弹幕按视频时间轴持久化：GET 拉取、POST 发送（登录 + CSRF）。
+	danmakuHandler := danmaku.NewHandler(db, authHandler, log)
 	// GIF 表情包：服务端代理上游图源（密钥不出站），搜索按人限流并落库缓存。
 	gifsHandler := gifs.NewHandler(db, authHandler, cacheStore.Client(), log)
 	// M11：用户侧设置页（账号 / 隐私 / 通知 / 播放 / 通用），通知偏好由此生效。
@@ -145,7 +148,7 @@ func run() error {
 			Playback: playbackHandler, Feed: feedHandler, Delivery: deliveryHandler,
 			SEO: seoHandler, Admin: adminHandler, Interactions: interactionsHandler,
 			Search: searchHandler, Notifications: notificationsHandler,
-			Settings: settingsHandler, Gifs: gifsHandler,
+			Settings: settingsHandler, Gifs: gifsHandler, Danmaku: danmakuHandler,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

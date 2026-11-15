@@ -11,6 +11,7 @@ import (
 	"github.com/yejie/voidxotv/internal/modules/admin"
 	"github.com/yejie/voidxotv/internal/modules/auth"
 	"github.com/yejie/voidxotv/internal/modules/content"
+	"github.com/yejie/voidxotv/internal/modules/danmaku"
 	"github.com/yejie/voidxotv/internal/modules/delivery"
 	"github.com/yejie/voidxotv/internal/modules/feed"
 	"github.com/yejie/voidxotv/internal/modules/gifs"
@@ -44,6 +45,7 @@ type Dependencies struct {
 	Admin         *admin.Handler
 	Interactions  *interactions.Handler
 	Gifs          *gifs.Handler
+	Danmaku       *danmaku.Handler
 	Search        *search.Handler
 	Notifications *notifications.Handler
 	Settings      *settings.Handler
@@ -93,6 +95,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 	if deps.Gifs != nil {
 		deps.Gifs.RegisterRoutes(mux)
+	}
+	if deps.Danmaku != nil {
+		deps.Danmaku.RegisterRoutes(mux)
 	}
 	if deps.Search != nil {
 		deps.Search.RegisterRoutes(mux)
