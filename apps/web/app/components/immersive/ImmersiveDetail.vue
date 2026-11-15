@@ -232,6 +232,8 @@ async function onFavorite(entry: FeedItem) {
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, [contenteditable="true"]') || sheetOpen.value) return
+  // 左右 ±5 秒、上下 ±5% 音量；与首页沉浸流共用同一份实现。
+  if (handlePlayerArrowKeys(event, player)) return
   if (event.key === ' ') { event.preventDefault(); void player.toggle() }
   if (event.key === 'm' || event.key === 'M') player.setMuted(!player.state.muted)
   if (event.key === 'f' || event.key === 'F') void player.toggleFullscreen()

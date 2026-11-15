@@ -39,6 +39,22 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.27.0] - 2026-11-15
+
+### 新增
+
+- **播放器方向键快捷键**：`apps/web/app/utils/playerKeys.ts` 新增共享处理，
+  左右 ±5 秒定位、上下 ±5% 音量；`apps/web/app/pages/index.vue` 与
+  `apps/web/app/components/immersive/ImmersiveDetail.vue` 的全局 keydown 复用
+  同一份实现，两个沉浸入口行为一致。
+  - 只在拿到视频时长时生效；输入框 / 文本域 / 可编辑区聚焦时不抢键；
+    `setVolume` 会自动解除静音，音量按百分比取整避免浮点尾数。
+  - 首页沉浸流的上下键原本用于切换视频，现让位给音量；切视频仍可用滚轮 /
+    触摸滑动。`ImmersiveItem.vue` 进度条上原有的局部 `@keydown.left/right`
+    删除，改由页面级统一处理，避免聚焦时局部与全局各 seek 一次变成 ±10 秒。
+  - `.tools/headless-test/m77-player-hotkeys.js`：9 项全过（详情页左右 ±5 秒、
+    上下 ±5% 音量、输入框聚焦不误触、首页上下改为音量且控制条不切走、无异常）。
+
 ## [0.26.0] - 2026-11-15
 
 ### 新增

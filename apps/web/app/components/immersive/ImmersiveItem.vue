@@ -483,13 +483,12 @@ function onSeek(event: MouseEvent) {
       :class="{ 'player-bar--flush': props.navHidden }"
       @click.stop
     >
-      <!-- 进度：贴在控制条上沿的细线，点击或方向键都能定位。 -->
+      <!-- 进度：贴在控制条上沿的细线。点击定位；方向键由页面级快捷键统一处理，
+           避免进度条聚焦时局部与全局各 seek 一次变成 ±10 秒。 -->
       <div
         class="pb-progress" role="slider" tabindex="0"
         :aria-valuenow="Math.round(progress)" aria-valuemin="0" aria-valuemax="100"
         aria-label="播放进度" @click="onSeek"
-        @keydown.left.prevent="emit('seek', Math.max(0, (props.player.currentTime - 5) / Math.max(props.player.duration, 1)))"
-        @keydown.right.prevent="emit('seek', Math.min(1, (props.player.currentTime + 5) / Math.max(props.player.duration, 1)))"
       >
         <span class="pb-track"><span class="pb-fill" :style="{ width: `${progress}%` }" /></span>
       </div>

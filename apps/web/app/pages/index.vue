@@ -258,9 +258,10 @@ function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, [contenteditable="true"]')) return
   if (sheetOpen.value) return
+  // 方向键统一交给播放器：左右 ±5 秒、上下 ±5% 音量。
+  // 沉浸流切视频仍可用滚轮 / 触摸滑动，不再占用上下键。
+  if (handlePlayerArrowKeys(event, player)) return
   switch (event.key) {
-    case 'ArrowDown': event.preventDefault(); go(current.value + 1); break
-    case 'ArrowUp': event.preventDefault(); go(current.value - 1); break
     case ' ': event.preventDefault(); void player.toggle(); break
     case 'm': case 'M': player.setMuted(!player.state.muted); break
     case 'f': case 'F': void player.toggleFullscreen(); break
