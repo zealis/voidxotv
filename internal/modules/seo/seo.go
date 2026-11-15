@@ -181,7 +181,14 @@ func (r *Repository) build(ctx context.Context, raw rawRow) (Page, error) {
 func (r *Repository) images(ctx context.Context, contentID int64) ([]string, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT s.driver, s.object_key
-		FROM media_assets m JOIN storage_objects s ON s.media_asset_id = m.id
+		FROM media_assets m
+		JOIN LATERAL (
+		  SELECT so.driver, so.object_key
+		  FROM storage_objects so
+		  WHERE so.media_asset_id = m.id
+		  ORDER BY CASE so.role WHEN 'display' THEN 0 ELSE 1 END, so.id
+		  LIMIT 1
+		) s ON true
 		WHERE m.content_id = $1 AND m.kind = 'image'
 		ORDER BY m.position, m.id`, contentID)
 	if err != nil {

@@ -12,6 +12,8 @@ const props = defineProps<{
   following: boolean
   /** 当前视频是否已放进「晚点再看」，驱动菜单项的图标与文案。 */
   watchlisted?: boolean
+  /** 图集当前展示的张序号（0 起），「下载原图」按它取对应的那张。 */
+  galleryIndex?: number
   counts: { likes: number; comments: number; favorites: number; shares: number }
   label: (value: number) => string
 }>()
@@ -34,7 +36,16 @@ const moreOpen = ref(false)
 const moreWrap = ref<HTMLElement | null>(null)
 const moreButton = ref<HTMLButtonElement | null>(null)
 const watchLaterItem = ref<HTMLButtonElement | null>(null)
+const downloadItem = ref<HTMLAnchorElement | null>(null)
 const reportItem = ref<HTMLButtonElement | null>(null)
+
+// 「下载原图」直接指向下载接口：服务端校验作品公开可见后回 302 到短时签名地址，
+// 并以 Content-Disposition: attachment 返回原图，浏览器不会把页面顶掉。
+const downloadHref = computed(() => {
+  if (props.item.type !== 'image') return ''
+  const index = Math.max(0, props.galleryIndex ?? 0)
+  return `/api/v1/contents/${props.item.id}/images/${index}/download`
+})
 
 function closeMore(restoreFocus = false) {
   if (!moreOpen.value) return
@@ -78,8 +89,10 @@ watch(moreOpen, async (open) => {
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('keydown', onKeydown, true)
     await nextTick()
-    // 视频条目第一项是「晚点再看」，图集没有该项时回落到「举报」。
-    if (moreOpen.value) (watchLaterItem.value ?? reportItem.value)?.focus()
+    // 菜单项随内容类型变化：视频首项是「晚点再看」，图集首项是「下载原图」。
+    if (moreOpen.value) {
+      (watchLaterItem.value ?? downloadItem.value ?? reportItem.value)?.focus()
+    }
   } else {
     document.removeEventListener('pointerdown', onPointerDown, true)
     document.removeEventListener('keydown', onKeydown, true)
@@ -160,6 +173,15 @@ onBeforeUnmount(() => {
           <ImIcon :name="props.watchlisted ? 'check' : 'clock'" :size="18" />
           <span>{{ props.watchlisted ? '已在晚点再看' : '晚点再看' }}</span>
         </button>
+        <!-- 图集才有原图：当前这张单独下载，列表里展示的是压缩过的展示图。 -->
+        <a
+          v-if="downloadHref"
+          ref="downloadItem" class="more-item" role="menuitem" :href="downloadHref"
+          rel="noopener" @click="closeMore()"
+        >
+          <ImIcon name="download" :size="18" />
+          <span>下载原图</span>
+        </a>
         <button
           ref="reportItem" type="button" class="more-item" role="menuitem" @click="onReport"
         >
@@ -349,12 +371,15 @@ onBeforeUnmount(() => {
   gap: 10px;
   width: 100%;
   padding: 9px 12px;
+  /* 「下载原图」是 <a>，要显式吃掉下划线与行内盒的内边距计算。 */
+  box-sizing: border-box;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--vp-im-text-primary);
   font-size: 13px;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 .more-item:hover { background: rgba(255, 255, 255, 0.08); }

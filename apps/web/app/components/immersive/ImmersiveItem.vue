@@ -342,6 +342,8 @@ watch(() => props.item.id, () => {
   openPop.value = ''
   closeMobileDanmaku()
   stopGallery()
+  // 换作品后张序号必须归零，否则「下载原图」会指向上一件图集的第 N 张。
+  galleryIndex.value = 0
   danmakuList.value = []
   danmakuPlaying.value = []
   danmakuLoaded.value = false
@@ -671,7 +673,7 @@ function onSeek(event: MouseEvent) {
       v-if="props.active && !props.clearUi"
       :item="props.item" :avatar="props.avatar"
       :liked="props.liked" :favorited="props.favorited" :following="props.following"
-      :watchlisted="props.watchlisted"
+      :watchlisted="props.watchlisted" :gallery-index="galleryIndex"
       :counts="props.counts" :label="props.label"
       @like="emit('like')" @comment="emit('comment')" @favorite="emit('favorite')"
       @share="emit('share')" @follow="emit('follow')"

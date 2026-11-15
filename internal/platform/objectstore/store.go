@@ -216,6 +216,22 @@ func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (
 	return signed.String(), nil
 }
 
+// PresignDownload 生成带下载文件名的签名地址：浏览器按 attachment 保存，
+// 不会把原图直接在页面里打开。原图只在用户点「下载原图」时走这条路径。
+func (s *Store) PresignDownload(ctx context.Context, key, filename string, ttl time.Duration) (string, error) {
+	if ttl <= 0 || ttl > MaxGetURLTTL {
+		ttl = PlaybackTTL
+	}
+	params := url.Values{}
+	params.Set("response-content-disposition",
+		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.PathEscape(filename)))
+	signed, err := s.publicClient.PresignedGetObject(ctx, s.bucket, key, ttl, params)
+	if err != nil {
+		return "", fmt.Errorf("objectstore: presign download: %w", err)
+	}
+	return signed.String(), nil
+}
+
 // MediaURL returns the browser-facing address for a media object: a stable CDN
 // path when the bucket is public-read, otherwise a short-lived presigned GET
 // (same policy as playback URLs). Feed galleries and the publish-page preview

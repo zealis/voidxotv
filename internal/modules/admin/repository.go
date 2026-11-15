@@ -161,7 +161,7 @@ const reviewQueueSQL = `
 	         JOIN storage_objects s ON s.media_asset_id = m.id
 	         WHERE m.content_id = c.id AND m.kind IN ('cover', 'image')
 	           AND s.driver = 's3'
-	         ORDER BY m.position, m.id LIMIT 1
+	         ORDER BY m.position, m.id, CASE s.role WHEN 'display' THEN 0 ELSE 1 END LIMIT 1
 	       ), '')
 	FROM contents c
 	JOIN users u ON u.id = c.author_id

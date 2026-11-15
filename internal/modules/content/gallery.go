@@ -23,13 +23,17 @@ import (
 	_ "image/png"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/yejie/voidxotv/internal/modules/auth"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
+	"github.com/yejie/voidxotv/internal/platform/imageproc"
 	"github.com/yejie/voidxotv/internal/platform/objectstore"
 )
 
@@ -84,6 +88,8 @@ func (h *Handler) registerGalleryRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/contents/{id}/images", h.auth.RequireAuth(http.HandlerFunc(h.listImages)))
 	mux.Handle("PUT /api/v1/contents/{id}/images/order", h.guarded(h.reorderImages))
 	mux.Handle("DELETE /api/v1/contents/{id}/images/{assetID}", h.guarded(h.removeImage))
+	// 原图下载：公开图集按序号取原图，短时签名后 302（Content-Disposition: attachment）。
+	mux.HandleFunc("GET /api/v1/contents/{id}/images/{index}/download", h.downloadImage)
 }
 
 // lockGallery 在事务里锁住内容行，确认是本人、且确实是图集。
@@ -118,7 +124,13 @@ func (h *Handler) galleryItems(ctx context.Context, q galleryQuerier, contentID 
 		SELECT m.id, m.position, m.mime_type, m.byte_size, m.width, m.height,
 		       COALESCE(s.driver, ''), COALESCE(s.object_key, '')
 		FROM media_assets m
-		LEFT JOIN storage_objects s ON s.media_asset_id = m.id
+		LEFT JOIN LATERAL (
+		  SELECT so.driver, so.object_key
+		  FROM storage_objects so
+		  WHERE so.media_asset_id = m.id
+		  ORDER BY CASE so.role WHEN 'display' THEN 0 ELSE 1 END, so.id
+		  LIMIT 1
+		) s ON true
 		WHERE m.content_id = $1 AND m.kind = 'image'
 		ORDER BY m.position, m.id`, contentID)
 	if err != nil {
@@ -223,16 +235,37 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 默认展示用压缩 WebP；原图始终单独保留，只有「下载原图」才读它。
+	// 转码失败（损坏图 / 不支持的编码）时回退到原图展示，不让上传失败。
+	displayKey := ""
+	var displayBytes []byte
+	if display, ok := imageproc.MakeDisplay(data); ok {
+		candidate := strings.TrimSuffix(key, ext) + "-display.webp"
+		if err := h.imageStore.PutBytes(ctx, candidate, display, "image/webp",
+			"public, max-age=31536000, immutable"); err != nil {
+			h.log.Warn("gallery display put failed", "error", err, "key", candidate)
+		} else {
+			displayKey = candidate
+			displayBytes = display
+		}
+	}
+	removeObjects := func() {
+		_ = h.imageStore.Remove(ctx, key)
+		if displayKey != "" {
+			_ = h.imageStore.Remove(ctx, displayKey)
+		}
+	}
+
 	tx, err := h.svc.repo.db.Begin(ctx)
 	if err != nil {
-		_ = h.imageStore.Remove(ctx, key)
+		removeObjects()
 		h.writeError(w, r, err)
 		return
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	state, slug, err := lockGallery(ctx, tx, id, principal.UserID, true)
 	if err != nil {
-		_ = h.imageStore.Remove(ctx, key)
+		removeObjects()
 		h.writeError(w, r, err)
 		return
 	}
@@ -241,12 +274,12 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		SELECT count(*), COALESCE(MAX(position), -1) + 1
 		FROM media_assets WHERE content_id = $1 AND kind = 'image'`, id).
 		Scan(&count, &position); err != nil {
-		_ = h.imageStore.Remove(ctx, key)
+		removeObjects()
 		h.writeError(w, r, err)
 		return
 	}
 	if count >= maxGalleryImages {
-		_ = h.imageStore.Remove(ctx, key)
+		removeObjects()
 		h.writeError(w, r, ErrGalleryLimit)
 		return
 	}
@@ -256,25 +289,35 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		    (content_id, kind, position, mime_type, byte_size, width, height, processing_status)
 		VALUES ($1, 'image', $2, $3, $4, $5, $6, 'ready') RETURNING id`,
 		id, position, mime, len(data), width, height).Scan(&assetID); err != nil {
-		_ = h.imageStore.Remove(ctx, key)
+		removeObjects()
 		h.writeError(w, r, err)
 		return
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO storage_objects (media_asset_id, driver, bucket, object_key, byte_size)
-		VALUES ($1, 's3', $2, $3, $4)`, assetID, h.imageBucket, key, len(data)); err != nil {
-		_ = h.imageStore.Remove(ctx, key)
+		INSERT INTO storage_objects (media_asset_id, driver, bucket, object_key, byte_size, role)
+		VALUES ($1, 's3', $2, $3, $4, 'original')`, assetID, h.imageBucket, key, len(data)); err != nil {
+		removeObjects()
 		h.writeError(w, r, err)
 		return
 	}
+	if displayKey != "" {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO storage_objects (media_asset_id, driver, bucket, object_key, byte_size, role)
+			VALUES ($1, 's3', $2, $3, $4, 'display')`,
+			assetID, h.imageBucket, displayKey, len(displayBytes)); err != nil {
+			removeObjects()
+			h.writeError(w, r, err)
+			return
+		}
+	}
 	items, err := h.galleryItems(ctx, tx, id)
 	if err != nil {
-		_ = h.imageStore.Remove(ctx, key)
+		removeObjects()
 		h.writeError(w, r, err)
 		return
 	}
 	if err := tx.Commit(ctx); err != nil {
-		_ = h.imageStore.Remove(ctx, key)
+		removeObjects()
 		h.writeError(w, r, err)
 		return
 	}
@@ -466,20 +509,45 @@ func (h *Handler) removeImage(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	var driver, key string
-	err = tx.QueryRow(ctx, `
-		SELECT COALESCE(s.driver, ''), COALESCE(s.object_key, '')
-		FROM media_assets m LEFT JOIN storage_objects s ON s.media_asset_id = m.id
-		WHERE m.id = $1 AND m.content_id = $2 AND m.kind = 'image'`, assetID, id).
-		Scan(&driver, &key)
-	if errors.Is(err, pgx.ErrNoRows) {
+	// 先确认这张图属于该作品，再取它所有变体（原图 + 展示图）的 key。
+	var exists bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM media_assets
+		WHERE id = $1 AND content_id = $2 AND kind = 'image')`, assetID, id).Scan(&exists); err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	if !exists {
 		h.writeError(w, r, ErrGalleryAsset)
 		return
 	}
+	rows, err := tx.Query(ctx, `
+		SELECT COALESCE(driver, ''), COALESCE(object_key, '')
+		FROM storage_objects WHERE media_asset_id = $1`, assetID)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
 	}
+	type storedObject struct {
+		driver string
+		key    string
+	}
+	var objects []storedObject
+	for rows.Next() {
+		var object storedObject
+		if err := rows.Scan(&object.driver, &object.key); err != nil {
+			rows.Close()
+			h.writeError(w, r, err)
+			return
+		}
+		objects = append(objects, object)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		h.writeError(w, r, err)
+		return
+	}
+	rows.Close()
 	var count int
 	if err := tx.QueryRow(ctx, `
 		SELECT count(*) FROM media_assets WHERE content_id = $1 AND kind = 'image'`, id).
@@ -529,12 +597,77 @@ func (h *Handler) removeImage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// DB 已提交，对象存储清理失败不回滚业务结果（孤儿对象由生命周期规则回收）。
-	if driver == "s3" && key != "" && h.imageStore != nil {
-		if err := h.imageStore.Remove(ctx, key); err != nil {
-			h.log.Warn("gallery object cleanup failed", "error", err, "key", key)
+	if h.imageStore != nil {
+		for _, object := range objects {
+			if object.driver != "s3" || object.key == "" {
+				continue
+			}
+			if err := h.imageStore.Remove(ctx, object.key); err != nil {
+				h.log.Warn("gallery object cleanup failed", "error", err, "key", object.key)
+			}
 		}
 	}
 	respondItems(w, items)
+}
+
+// downloadImage 返回公开图集第 index 张的原图下载地址。
+// 只处理已发布、已通过、公开的内容；其余一律 404，不泄露是否存在。
+func (h *Handler) downloadImage(w http.ResponseWriter, r *http.Request) {
+	if h.imageStore == nil {
+		h.writeError(w, r, ErrStorageDown)
+		return
+	}
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	index, err := strconv.Atoi(r.PathValue("index"))
+	if err != nil || index < 0 {
+		httpserver.Error(w, http.StatusBadRequest, "invalid_id", "invalid image index",
+			httpserver.RequestIDFromContext(r.Context()))
+		return
+	}
+	var title, driver, key string
+	err = h.svc.repo.db.QueryRow(r.Context(), `
+		SELECT c.title, s.driver, s.object_key
+		FROM contents c
+		JOIN media_assets m ON m.content_id = c.id AND m.kind = 'image'
+		JOIN storage_objects s ON s.media_asset_id = m.id AND s.role = 'original'
+		WHERE c.id = $1
+		  AND c.publish_state = 'published'
+		  AND c.review_status IN ('approved', 'limited')
+		  AND c.visibility = 'public'
+		ORDER BY m.position, m.id
+		OFFSET $2 LIMIT 1`, id, index).Scan(&title, &driver, &key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpserver.Error(w, http.StatusNotFound, "not_found", "内容不存在",
+			httpserver.RequestIDFromContext(r.Context()))
+		return
+	}
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	if driver != "s3" || key == "" {
+		httpserver.Error(w, http.StatusNotFound, "not_found", "内容不存在",
+			httpserver.RequestIDFromContext(r.Context()))
+		return
+	}
+
+	name := strings.TrimSpace(title)
+	if name == "" {
+		name = "image"
+	}
+	if utf8.RuneCountInString(name) > 60 {
+		name = string([]rune(name)[:60])
+	}
+	filename := fmt.Sprintf("%s-%d%s", name, index+1, filepath.Ext(key))
+	signed, err := h.imageStore.PresignDownload(r.Context(), key, filename, 5*time.Minute)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, signed, http.StatusFound)
 }
 
 // GalleryStats 供发布前校验图集张数（§3.2 沉浸流准入）。

@@ -304,7 +304,7 @@ func (r *Repository) CardMeta(ctx context.Context, ids []int64) (map[int64]CardM
 		            FROM media_assets m
 		            JOIN storage_objects s ON s.media_asset_id = m.id
 		           WHERE m.content_id = c.id AND m.kind = 'image'
-		           ORDER BY m.position, m.id
+		           ORDER BY m.position, m.id, CASE s.role WHEN 'display' THEN 0 ELSE 1 END
 		           LIMIT 1),
 		         (SELECT 's3:' || (f->>'key')
 		            FROM artifact_manifests am,
