@@ -33,7 +33,7 @@ function onCommentCount(total: number) {
 
 const reportOpen = ref(false)
 function onReported() {
-  toast.value = '举报已提交，处置结果将在「我的举报」中反馈'
+  toast.value = '举报已提交，处置结果会发到消息'
   if (toastTimer) clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toast.value = '' }, 2600)
 }

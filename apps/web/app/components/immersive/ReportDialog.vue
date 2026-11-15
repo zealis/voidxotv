@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 举报对话框：把已有后端（POST /api/v1/reports，24 小时并单，§9.5）接到前台。
-// 理由枚举与 admin repository 的 validReasons 对齐；处置结果在「我 → 我的举报」可见。
+// 理由枚举与 admin repository 的 validReasons 对齐；处置结果通过站内「系统」通知反馈。
 import { ref, watch } from 'vue'
 import { ApiError, errorMessage } from '~/composables/useApi'
 
@@ -84,7 +84,7 @@ async function submit() {
     <p class="dialog-text">
       举报「{{ props.contentTitle || (props.objectType === 'comment' ? '该评论' : '该作品') }}」：
       {{ props.objectType === 'comment' ? '同一条评论' : '同一条内容' }} 24 小时内的举报会合并处理，
-      处置结果将在「我 → 我的举报」反馈。
+      处置结果会发到消息 → 系统。
     </p>
     <p v-if="needLogin" class="dialog-text">
       请先<button type="button" class="login" @click="goLogin">登录</button>后再举报。

@@ -53,17 +53,6 @@ interface MyProfile {
   verified_creator?: boolean
 }
 
-interface MyReport {
-  id: number
-  object_type: string
-  object_id: number
-  object_title?: string
-  reason: string
-  detail: string
-  status: string
-  resolution?: string
-}
-
 type ProfileTab = 'works' | 'likes' | 'favorites' | 'history' | 'watchlist'
 
 interface Card {
@@ -107,7 +96,6 @@ const loaded = reactive<Record<ProfileTab, boolean>>({
 })
 const reactedLoading = ref(false)
 const appeals = ref<Record<number, AppealItem>>({})
-const reports = ref<MyReport[]>([])
 const loading = ref(false)
 const checking = ref(true)
 const needLogin = ref(false)
@@ -132,9 +120,6 @@ const statusText: Record<string, string> = {
 const mediaText: Record<string, string> = {
   processing: '处理中', failed: '处理失败', none: '处理失败',
 }
-const reportStatusText: Record<string, string> = {
-  pending: '待处理', upheld: '已处置成立', dismissed: '已处置不成立',
-}
 const appealable = new Set(['rejected', 'taken_down', 'limited'])
 
 async function load() {
@@ -142,10 +127,9 @@ async function load() {
   message.value = ''
   asyncState.begin()
   try {
-    const [works, mine, reported, stats, owner] = await Promise.all([
+    const [works, mine, stats, owner] = await Promise.all([
       api<{ items: ContentItem[] }>('/api/v1/contents/mine?limit=50'),
       api<{ items: AppealItem[] }>('/api/v1/appeals/mine'),
-      api<{ items: MyReport[] }>('/api/v1/reports/mine').catch(() => ({ items: [] })),
       api<{ works: number; likes_received: number; following: number; followers: number }>(
         '/api/v1/me/counts').catch(() => null),
       api<MyProfile>('/api/v1/me/profile').catch(() => null),
@@ -154,7 +138,6 @@ async function load() {
     profile.value = owner
     items.value = works.items || []
     appeals.value = Object.fromEntries((mine.items || []).map((item) => [item.content_id, item]))
-    reports.value = reported.items || []
     asyncState.succeed()
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
@@ -429,7 +412,6 @@ async function submitAppeal() {
             <div class="chips">
               <NuxtLink to="/settings">编辑资料</NuxtLink>
               <NuxtLink to="/me/drafts">草稿箱</NuxtLink>
-              <a href="#reports">我的举报</a>
             </div>
           </div>
         </div>
@@ -502,22 +484,6 @@ async function submitAppeal() {
         </article>
       </div>
       <p v-else class="empty">{{ query ? '没有匹配的作品。' : emptyText }}</p>
-
-      <section v-if="reports.length" id="reports" class="reports">
-        <h2>我的举报</h2>
-        <ul>
-          <li v-for="report in reports" :key="report.id">
-            <div class="report-head">
-              <strong>{{ report.object_title || ('# ' + report.object_id) }}</strong>
-              <span class="status" :class="report.status">
-                {{ reportStatusText[report.status] || report.status }}
-              </span>
-            </div>
-            <p class="note">理由：{{ report.reason }}<template v-if="report.detail"> · {{ report.detail }}</template></p>
-            <p v-if="report.resolution" class="note">处理结果：{{ report.resolution }}</p>
-          </li>
-        </ul>
-      </section>
     </VpAsyncState>
 
     <VpDialog :open="deleteOpen" title="删除所选作品" :busy="deleting" @close="deleteOpen = false">
@@ -750,24 +716,6 @@ async function submitAppeal() {
   font-size: 13px; color: var(--vp-im-text-secondary);
 }
 
-.reports { max-width: 1560px; margin: 34px auto 0; padding: 0 28px; }
-.reports h2 { margin: 0 0 10px; font-size: 14px; color: var(--vp-im-text-secondary); }
-.reports ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.reports li {
-  padding: 12px 14px; border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);
-}
-.report-head { display: flex; align-items: center; gap: 8px; }
-.report-head strong { font-size: 13px; }
-.status {
-  padding: 2px 9px; border-radius: 99px; font-size: 11px;
-  background: rgba(255, 255, 255, 0.08); color: var(--vp-im-text-secondary);
-}
-.report-head .status { margin-left: auto; }
-.status.upheld { background: rgba(52, 211, 153, 0.14); color: #34d399; }
-.status.dismissed { background: rgba(255, 255, 255, 0.08); }
-.note { margin: 8px 0 0; font-size: 12px; line-height: 1.6; color: var(--vp-im-text-secondary); }
-
 .gate { max-width: 820px; margin: 60px auto; text-align: center; }
 .gate p { margin: 0 0 14px; font-size: 13px; color: var(--vp-im-text-secondary); }
 .cta {
@@ -807,7 +755,7 @@ textarea {
   .avatar { width: 76px; height: 76px; font-size: 26px; }
   .name strong { font-size: 17px; }
   .counts { gap: 14px; }
-  .tabbar, .grid, .search-row, .reports, .notice, .hint { padding-left: 16px; padding-right: 16px; }
+  .tabbar, .grid, .search-row, .notice, .hint { padding-left: 16px; padding-right: 16px; }
   .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; }
   .tabs button { font-size: 13px; padding: 12px 9px 11px; }
   .search-row { justify-content: stretch; }

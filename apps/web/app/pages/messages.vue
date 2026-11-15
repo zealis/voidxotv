@@ -46,7 +46,7 @@ const GROUPS: GroupMeta[] = [
   {
     key: 'system', label: '系统', icon: 'shield',
     emptyTitle: '还没有系统通知',
-    emptyHint: '审核结论、申诉结果与账号状态变动会出现在这里。',
+    emptyHint: '审核结论、申诉结果、举报结果与账号状态变动会出现在这里。',
   },
 ]
 

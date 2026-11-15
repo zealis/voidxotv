@@ -336,7 +336,7 @@ onBeforeUnmount(() => {
 
       <ReportDialog
         :open="reportOpen" :content-id="item.id" :content-title="item.title"
-        @close="reportOpen = false" @reported="notify('举报已提交，处置结果将在「我的举报」中反馈')"
+        @close="reportOpen = false" @reported="notify('举报已提交，处置结果会发到消息')"
       />
       <button
         v-if="item && item.type === 'video'" type="button"
