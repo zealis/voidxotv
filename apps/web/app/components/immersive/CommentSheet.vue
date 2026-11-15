@@ -77,7 +77,30 @@ const replyTo = ref<{ id: number; name: string } | null>(null)
 const confirmDelete = ref<number | null>(null)
 const me = ref<{ id: number; handle: string } | null>(null)
 const threads = reactive<Record<number, Thread>>({})
-const input = ref<HTMLInputElement | null>(null)
+const input = ref<HTMLTextAreaElement | null>(null)
+
+// 评论框从单行起、随内容长高，最多 5 行左右；超过后框内滚动。
+// 用 scrollHeight 而不是按字符数估算：中文、换行、不同字号都能自适应。
+const MAX_DRAFT_HEIGHT = 120
+
+function growDraft() {
+  const element = input.value
+  if (!element) return
+  element.style.height = 'auto'
+  element.style.height = `${Math.min(element.scrollHeight, MAX_DRAFT_HEIGHT)}px`
+}
+
+function onDraftInput() {
+  clampDraft()
+  void nextTick(growDraft)
+}
+
+// Enter 发送、Shift+Enter 换行；中文输入法选词时的 Enter 不拦。
+function onDraftKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+  event.preventDefault()
+  void submit()
+}
 let confirmTimer: ReturnType<typeof setTimeout> | null = null
 
 // 评论点赞 / 更多菜单：点赞走服务端 toggle，先乐观更新再按返回值对齐。
@@ -132,6 +155,7 @@ watch(() => props.open, async (open) => {
     return
   }
   await nextTick()
+  growDraft()
   input.value?.focus()
   if (!items.value.length) load(true)
   const who = await getMe()
@@ -229,11 +253,13 @@ function onPickGif(url: string) {
   clampDraft()
   emojiOpen.value = false
   input.value?.focus()
+  void nextTick(growDraft)
 }
 
 function startReply(target: { id: number; handle: string; display_name?: string }) {
   replyTo.value = { id: target.id, name: authorName(target) }
   input.value?.focus()
+  void nextTick(growDraft)
 }
 
 function cancelReply() {
@@ -268,6 +294,7 @@ async function submit() {
   }
   sentDraft.value = text
   draft.value = ''
+  void nextTick(growDraft)
   emojiOpen.value = false
   posting.value = true
   try {
@@ -297,6 +324,7 @@ async function submit() {
       items.value = items.value.filter((it) => it.id !== -now)
     }
     draft.value = sentDraft.value
+    void nextTick(growDraft)
     postFailed.value = true
     notice.value = errorMessage(error)
   } finally {
@@ -365,6 +393,7 @@ function insertEmoji(char: string) {
     element.focus()
     const caret = start + char.length
     element.setSelectionRange(caret, caret)
+    growDraft()
   })
 }
 
@@ -595,10 +624,11 @@ function isMine(item: { user_id: number; id: number }): boolean {
         </div>
         <div class="row">
           <div class="input-wrap">
-            <input
-              ref="input" v-model="draft" type="text" @input="clampDraft"
+            <textarea
+              ref="input" v-model="draft" rows="1" enterkeyhint="send"
               :placeholder="replyTo ? `回复 @${replyTo.name}…` : '说点什么…'"
               aria-label="评论内容"
+              @input="onDraftInput" @keydown="onDraftKeydown"
             />
             <!-- @ 提及与表情内嵌在输入框右端；发送交给回车 / 软键盘「发送」键。 -->
             <div ref="emojiAnchor" class="pickers">
@@ -794,34 +824,43 @@ function isMine(item: { user_id: number; id: number }): boolean {
   color: var(--vp-im-text-primary);
   cursor: pointer;
 }
-/* 一整条圆角输入区占满一行，@ / 表情内嵌在右端，不再有独立发送按钮。
-   边框与底色挂在外壳上，input 自身透明，文字与图标才不会抢同一层。 */
+/* 一整条输入区占满一行，@ / 表情内嵌在右端，不再有独立发送按钮。
+   边框与底色挂在外壳上，textarea 自身透明，文字与图标才不会抢同一层。
+   圆角用 20px 而不是 999px：单行 40px 高时仍是胶囊，多行加高后不会变成大圆弧。 */
 .composer .input-wrap {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   flex: 1 1 auto;
   min-width: 0;
   box-sizing: border-box;
   padding: 0 6px 0 14px;
   border: 1px solid var(--vp-im-border);
-  border-radius: 999px;
+  border-radius: 20px;
   background: var(--vp-im-surface-raised);
 }
 .composer .input-wrap:focus-within { border-color: var(--vp-im-accent); }
-.composer input {
+/* 单行起、随内容长高；超过 5 行后框内滚动。textarea 自带 padding，
+   40px = 20px 行高 + 上下各 10px，与改造前单行输入框的高度一致。 */
+.composer textarea {
   flex: 1 1 auto;
   min-width: 0;
-  height: 40px;
-  padding: 0;
+  min-height: 40px;
+  max-height: 120px;
+  box-sizing: border-box;
+  padding: 10px 0;
   border: 0;
   background: transparent;
   color: var(--vp-im-text-primary);
+  font: inherit;
   font-size: 13px;
+  line-height: 20px;
   outline: none;
+  resize: none;
+  overflow-y: auto;
 }
-/* 全局 :focus-visible 会给 input 画一圈品牌粉 box-shadow；input 现在直角无边框，
-   那圈环会变成与外层胶囊不搭的矩形，像表单报错。焦点交给 .input-wrap 的边框表达。 */
-.composer input:focus-visible { box-shadow: none; }
+/* 全局 :focus-visible 会给输入框画一圈品牌粉 box-shadow；textarea 现在直角无边框，
+   那圈环会变成与外层圆角不搭的矩形，像表单报错。焦点交给 .input-wrap 的边框表达。 */
+.composer textarea:focus-visible { box-shadow: none; }
 /* 表情面板以这里为定位锚点（面板向右对齐、浮在输入区上方）。
    窄屏时改成 static，让面板去以整条 .composer 为基准铺满一行，见 EmojiPanel。 */
 .composer .pickers {
