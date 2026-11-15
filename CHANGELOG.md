@@ -39,6 +39,25 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.27.2] - 2026-11-15
+
+### 修复
+
+- **首页沉浸流 / 方向键**：0.27.0 把 ↑/↓ 从「切换上一条 / 下一条视频」改成了
+  「调音量」，沉浸流没法用键盘翻内容。根因：把上下键在两个沉浸入口统一当成音量键，
+  没区分首页有多条内容、详情页只有一条。改法：`utils/playerKeys.ts` 的
+  `handlePlayerArrowKeys` 增加 `volumeKeys` 开关；`pages/index.vue` 传
+  `{ volumeKeys: false }`，并在自己的 switch 里恢复 `go(current ± 1)`（滚轮 /
+  触摸切视频不受影响），同时删掉首页的 `volumeHint` 及对应 prop——首页不再有
+  键盘调音量，不留死代码。`ImmersiveDetail.vue` 保持上下键 ±5% 音量与 0.27.1
+  的音量指示条自动唤出；两页左右键仍 ±5 秒定位、输入框聚焦不抢键。
+
+### 改进
+
+- `.tools/headless-test/m77-player-hotkeys.js` 与 `m78-volume-hint.js`：T4 断言
+  反过来——首页 ↓/↑ 让 `.scroller.scrollTop` 0→900→0、不弹音量指示条；详情页
+  上下调音量与指示条弹出的断言保留。m77 9 项、m78 15 项全过。
+
 ## [0.27.1] - 2026-11-15
 
 ### 修复

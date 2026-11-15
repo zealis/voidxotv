@@ -254,22 +254,16 @@ function go(index: number) {
   root.scrollTo({ top: target * root.clientHeight, behavior: reduced ? 'auto' : 'smooth' })
 }
 
-// 键盘改音量时递增，通知当前激活的卡片把音量指示条临时唤出。
-// 沉浸流同时渲染 3 条内容，只有 active 的那条会响应。
-const volumeHint = ref(0)
-
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, [contenteditable="true"]')) return
   if (sheetOpen.value) return
-  // 方向键统一交给播放器：左右 ±5 秒、上下 ±5% 音量。
-  // 沉浸流切视频仍可用滚轮 / 触摸滑动，不再占用上下键。
-  const action = handlePlayerArrowKeys(event, player)
-  if (action) {
-    if (action === 'volume') volumeHint.value++
-    return
-  }
+  // 首页沉浸流的 ↑/↓ 用来切换上一条 / 下一条视频（滚轮 / 触摸同样可切）；
+  // 左右键 ±5 秒定位交给共享播放器工具，音量仍由鼠标悬停控制条滑块调节。
+  if (handlePlayerArrowKeys(event, player, { volumeKeys: false })) return
   switch (event.key) {
+    case 'ArrowDown': event.preventDefault(); go(current.value + 1); break
+    case 'ArrowUp': event.preventDefault(); go(current.value - 1); break
     case ' ': event.preventDefault(); void player.toggle(); break
     case 'm': case 'M': player.setMuted(!player.state.muted); break
     case 'f': case 'F': void player.toggleFullscreen(); break
@@ -401,7 +395,6 @@ onBeforeUnmount(() => {
           :caption="caption(item.description)" :tags="tags(item.description)"
           :expanded="expanded" :watchlisted="watchlisted"
           :autoplay="barAutoplay" :clear-ui="barClear" :nav-hidden="chromeCollapsed"
-          :volume-hint="volumeHint"
           @toggle="player.toggle()" @like="onLike(item)"
           @toggle-chrome="toggleImageChrome"
           @comment="sheetOpen = true" @favorite="onFavorite(item)"
