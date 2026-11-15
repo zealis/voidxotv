@@ -39,6 +39,41 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.31.4] - 2026-11-15
+
+### 新增
+
+- **N+1 静态检查**：`internal/tools/checkn1` 用 Go AST 扫描 `for` / `range`
+  循环体内直接调用 `db` / `tx` / `pool` 的 `Query` / `QueryRow` / `Exec`；
+  挂到 `npm run check:n-plus-one`。确实必须逐条执行时，在调用行或上一行写
+  `// n+1-allow: 原因` 豁免。
+- **`PERFORMANCE.md` 数据库访问规范**：列表 / 批量接口的 SQL 条数必须与数据量
+  无关；批量读用 `ANY($1)` / JOIN，批量写用 `unnest` /
+  `WITH ORDINALITY` / `ON CONFLICT`；循环只做内存映射与参数拼接。
+
+### 重构
+
+- **去掉多处循环内查库（N+1）**：
+  - `content.SetContentTopics`：话题状态一次 `ANY($1)` 查回、内存校验；
+    关联一次 `INSERT ... SELECT unnest($2::bigint[])`。
+  - 图集排序：一条 `UPDATE ... FROM unnest($2::bigint[]) WITH ORDINALITY`
+    按序号重排，SQL 次数与图片张数无关。
+  - `gifs.SaveConfig` 与 `spam.savePairs`：11 个配置键一次 `unnest` 批量
+    upsert，不再逐键 `INSERT ... ON CONFLICT`。
+  - `delivery.Enqueue`：页面版本一次批量 upsert、任务一次批量插入，并包事务；
+    同一批重复页面先去重。`delivery.PublishEvent` 改用 `enqueuePages`，
+    每条事件固定 3 条 SQL（原先 页数 × 3）。
+  - `content.scheduler`：定时发布到期内容的 outbox 事件一次批量写入。
+  - `stats` 聚合：一次 `ANY($1) ... FOR UPDATE` 锁回计数、一次批量写当天增量、
+    一次批量 upsert 累计值；聚合耗时不再随内容量线性增长。
+
+### 改进
+
+- 验证：在真实 PostgreSQL 的事务里逐条执行上述批量语句（含约束与
+  `RETURNING`），全部通过并回滚；`m93-batch-sql.js` 8 项全过（GIF 配置批量
+  保存后不漂移、重算榜单成功、概览可读）；`checkn1` 扫描归零；
+  `gofmt/vet/test/build`、`typecheck`、`version:check` 全过。
+
 ## [0.31.3] - 2026-11-15
 
 ### 安全维护

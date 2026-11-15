@@ -129,11 +129,8 @@ func (r *Repository) Schedule(ctx context.Context, event OutboxEvent, ref Conten
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	for _, page := range pages {
-		if err := r.enqueuePage(ctx, tx, page.Key, page.Kind, event.Type,
-			0, time.Now().UTC().Add(page.Delay), maxAttempts); err != nil {
-			return err
-		}
+	if err := r.enqueuePages(ctx, tx, pages, event.Type, maxAttempts); err != nil {
+		return err
 	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO delivery_dependencies (page_key, depends_on, kind)
@@ -169,37 +166,74 @@ func (r *Repository) RecycleContentPages(ctx context.Context, slug, typ string) 
 	return err
 }
 
-func (r *Repository) enqueuePage(ctx context.Context, db executor, pageKey, pageType,
-	trigger string, priority int, scheduledAt time.Time, maxAttempts int) error {
-	var version int64
-	err := db.QueryRow(ctx, `
+// enqueuePages 一次处理一批页面：upsert 版本、取消旧 pending、插入新任务各一条 SQL，
+// 不按页面逐条发查询（事件可能同时影响详情页 / 作者页 / 分类页 / 首页）。
+func (r *Repository) enqueuePages(ctx context.Context, db executor, pages []scheduledPage,
+	trigger string, maxAttempts int) error {
+	if len(pages) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(pages))
+	kinds := make([]string, 0, len(pages))
+	scheduled := make([]time.Time, 0, len(pages))
+	for _, page := range pages {
+		keys = append(keys, page.Key)
+		kinds = append(kinds, page.Kind)
+		scheduled = append(scheduled, time.Now().UTC().Add(page.Delay))
+	}
+
+	rows, err := db.Query(ctx, `
 		INSERT INTO delivery_pages (page_key, page_type, desired_version)
-		VALUES ($1, $2, 1)
+		SELECT t.page_key, t.page_type, 1
+		FROM unnest($1::text[], $2::text[]) AS t(page_key, page_type)
 		ON CONFLICT (page_key) DO UPDATE
 		  SET desired_version = delivery_pages.desired_version + 1,
 		      status = 'active', updated_at = now()
-		RETURNING desired_version`, pageKey, pageType).Scan(&version)
+		RETURNING page_key, desired_version`, keys, kinds)
 	if err != nil {
 		return fmt.Errorf("delivery: bump desired_version: %w", err)
 	}
+	versions := make(map[string]int64, len(keys))
+	for rows.Next() {
+		var key string
+		var version int64
+		if err := rows.Scan(&key, &version); err != nil {
+			rows.Close()
+			return err
+		}
+		versions[key] = version
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	versionList := make([]int64, 0, len(keys))
+	for _, key := range keys {
+		versionList = append(versionList, versions[key])
+	}
+
 	if _, err := db.Exec(ctx, `
 		UPDATE delivery_jobs SET status = 'cancelled', updated_at = now()
-		WHERE page_key = $1 AND status = 'pending'`, pageKey); err != nil {
+		WHERE page_key = ANY($1) AND status = 'pending'`, keys); err != nil {
 		return err
 	}
 	_, err = db.Exec(ctx, `
 		INSERT INTO delivery_jobs
 		  (page_key, page_type, trigger_type, priority, target_version, scheduled_at, max_attempts)
-		SELECT $1, $2, $3, $4, $5, $6, $7
+		SELECT t.page_key, t.page_type, $3, 0, t.target_version, t.scheduled_at, $4
+		FROM unnest($1::text[], $2::text[], $5::bigint[], $6::timestamptz[])
+		  AS t(page_key, page_type, target_version, scheduled_at)
 		WHERE NOT EXISTS (
 		  SELECT 1 FROM delivery_jobs d
-		  WHERE d.page_key = $1 AND d.target_version = $5
+		  WHERE d.page_key = t.page_key AND d.target_version = t.target_version
 		    AND d.status IN ('pending','processing','retrying','published')
-		)`, pageKey, pageType, trigger, priority, version, scheduledAt, maxAttempts)
+		)`, keys, kinds, trigger, maxAttempts, versionList, scheduled)
 	return err
 }
 
 type executor interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
@@ -427,8 +461,18 @@ func (r *Repository) CancelJob(ctx context.Context, id int64) error {
 
 func (r *Repository) Enqueue(ctx context.Context, pageKeys []string, priority, maxAttempts int,
 	delay time.Duration) (int, error) {
-	created := 0
+	if len(pageKeys) == 0 {
+		return 0, nil
+	}
+	// 同一批里重复的页面只处理一次：批量 upsert 对同一行更新两次会报错。
+	keys := make([]string, 0, len(pageKeys))
+	kinds := make([]string, 0, len(pageKeys))
+	seen := make(map[string]struct{}, len(pageKeys))
 	for _, pageKey := range pageKeys {
+		if _, ok := seen[pageKey]; ok {
+			continue
+		}
+		seen[pageKey] = struct{}{}
 		kind := "detail"
 		switch {
 		case pageKey == "/":
@@ -440,29 +484,65 @@ func (r *Repository) Enqueue(ctx context.Context, pageKeys []string, priority, m
 		case len(pageKey) > 9 && pageKey[:9] == "/category":
 			kind = "category"
 		}
-		var version int64
-		if err := r.db.QueryRow(ctx, `
-			INSERT INTO delivery_pages (page_key, page_type, desired_version)
-			VALUES ($1,$2,1)
-			ON CONFLICT (page_key) DO UPDATE
-			  SET desired_version = delivery_pages.desired_version + 1, updated_at=now()
-			RETURNING desired_version`, pageKey, kind).Scan(&version); err != nil {
-			return created, err
-		}
-		tag, err := r.db.Exec(ctx, `
-			INSERT INTO delivery_jobs
-			  (page_key,page_type,trigger_type,priority,target_version,scheduled_at,max_attempts)
-			SELECT $1,$2,'manual',$3,$4,$5,$6
-			WHERE NOT EXISTS (
-			  SELECT 1 FROM delivery_jobs d WHERE d.page_key=$1 AND d.target_version=$4
-			    AND d.status IN ('pending','processing','retrying','published')
-			)`, pageKey, kind, priority, version, time.Now().UTC().Add(delay), maxAttempts)
-		if err != nil {
-			return created, err
-		}
-		created += int(tag.RowsAffected())
+		keys = append(keys, pageKey)
+		kinds = append(kinds, kind)
 	}
-	return created, nil
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// 一次 upsert 全部页面并取回新版本；SQL 次数与页面数无关。
+	rows, err := tx.Query(ctx, `
+		INSERT INTO delivery_pages (page_key, page_type, desired_version)
+		SELECT t.page_key, t.page_type, 1
+		FROM unnest($1::text[], $2::text[]) AS t(page_key, page_type)
+		ON CONFLICT (page_key) DO UPDATE
+		  SET desired_version = delivery_pages.desired_version + 1, updated_at = now()
+		RETURNING page_key, desired_version`, keys, kinds)
+	if err != nil {
+		return 0, err
+	}
+	versions := make(map[string]int64, len(keys))
+	for rows.Next() {
+		var pageKey string
+		var version int64
+		if err := rows.Scan(&pageKey, &version); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		versions[pageKey] = version
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	rows.Close()
+	versionList := make([]int64, 0, len(keys))
+	for _, pageKey := range keys {
+		versionList = append(versionList, versions[pageKey])
+	}
+
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO delivery_jobs
+		  (page_key,page_type,trigger_type,priority,target_version,scheduled_at,max_attempts)
+		SELECT t.page_key, t.page_type, 'manual', $3, t.target_version, $4, $5
+		FROM unnest($1::text[], $2::text[], $6::bigint[])
+		  AS t(page_key, page_type, target_version)
+		WHERE NOT EXISTS (
+		  SELECT 1 FROM delivery_jobs d
+		  WHERE d.page_key = t.page_key AND d.target_version = t.target_version
+		    AND d.status IN ('pending','processing','retrying','published')
+		)`, keys, kinds, priority, time.Now().UTC().Add(delay), maxAttempts, versionList)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (r *Repository) Stats(ctx context.Context) (map[string]int64, error) {

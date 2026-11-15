@@ -81,14 +81,24 @@ func (s *Scheduler) RunOnce(ctx context.Context) (int, error) {
 		return 0, err
 	}
 
-	for _, item := range dueList {
+	if len(dueList) > 0 {
+		// 一次写入所有到期内容的发布事件：积压时 SQL 次数仍是 1 条。
+		eventKeys := make([]string, 0, len(dueList))
+		ids := make([]int64, 0, len(dueList))
+		slugs := make([]string, 0, len(dueList))
+		for _, item := range dueList {
+			eventKeys = append(eventKeys, fmt.Sprintf("content.published:%d:%d",
+				item.id, time.Now().UnixNano()))
+			ids = append(ids, item.id)
+			slugs = append(slugs, item.slug)
+		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO outbox_events (event_key, event_type, payload)
-			VALUES ($1, 'content.published',
-			  jsonb_build_object('content_id', $2::bigint, 'slug', $3::text))
-			ON CONFLICT (event_key) DO NOTHING`,
-			fmt.Sprintf("content.published:%d:%d", item.id, time.Now().UnixNano()),
-			item.id, item.slug); err != nil {
+			SELECT t.event_key, 'content.published',
+			  jsonb_build_object('content_id', t.content_id, 'slug', t.slug)
+			FROM unnest($1::text[], $2::bigint[], $3::text[])
+			  AS t(event_key, content_id, slug)
+			ON CONFLICT (event_key) DO NOTHING`, eventKeys, ids, slugs); err != nil {
 			return 0, err
 		}
 	}

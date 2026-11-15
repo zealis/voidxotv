@@ -401,10 +401,14 @@ func (h *Handler) reorderImages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	for position, assetID := range request.IDs {
+	// 一条 UPDATE 带序号批量重排：SQL 次数与图片张数无关。
+	if len(request.IDs) > 0 {
 		if _, err := tx.Exec(ctx, `
-			UPDATE media_assets SET position = $3
-			WHERE id = $1 AND content_id = $2 AND kind = 'image'`, assetID, id, position); err != nil {
+			UPDATE media_assets AS m
+			SET position = t.ord - 1
+			FROM unnest($2::bigint[]) WITH ORDINALITY AS t(asset_id, ord)
+			WHERE m.id = t.asset_id AND m.content_id = $1 AND m.kind = 'image'`,
+			id, request.IDs); err != nil {
 			h.writeError(w, r, err)
 			return
 		}

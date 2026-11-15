@@ -170,31 +170,65 @@ func (a *Aggregator) RunOnce(ctx context.Context) error {
 		return fmt.Errorf("stats: fold daily: %w", err)
 	}
 
-	for contentID, count := range contentPlays {
+	if len(contentPlays) > 0 {
+		// 一次锁回现有计数、一次写当天增量、一次 upsert 累计值：
+		// 聚合跑全量内容，逐条查询会随内容量线性增长。
+		ids := make([]int64, 0, len(contentPlays))
+		counts := make([]int64, 0, len(contentPlays))
+		for contentID, count := range contentPlays {
+			ids = append(ids, contentID)
+			counts = append(counts, count)
+		}
+
+		rows, err := tx.Query(ctx, `
+			SELECT content_id, plays FROM content_counters
+			WHERE content_id = ANY($1) FOR UPDATE`, ids)
+		if err != nil {
+			return fmt.Errorf("stats: read content counters: %w", err)
+		}
+		previous := make(map[int64]int64, len(ids))
+		for rows.Next() {
+			var contentID, plays int64
+			if err := rows.Scan(&contentID, &plays); err != nil {
+				rows.Close()
+				return fmt.Errorf("stats: scan content counter: %w", err)
+			}
+			previous[contentID] = plays
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return fmt.Errorf("stats: read content counters: %w", err)
+		}
+		rows.Close()
+
 		// 把本次累计值的增量记到当天，创作者看板才有按天趋势。
 		// 首次见到某个作品时只建立基线、不记当天：否则历史累计会在第一次
 		// 折叠时全部堆到今天，趋势图第一根柱子会假高。
-		var previous int64
-		readErr := tx.QueryRow(ctx,
-			`SELECT plays FROM content_counters WHERE content_id = $1 FOR UPDATE`,
-			contentID).Scan(&previous)
-		if readErr != nil && !errors.Is(readErr, pgx.ErrNoRows) {
-			return fmt.Errorf("stats: read content counter: %w", readErr)
+		deltaIDs := make([]int64, 0, len(ids))
+		deltas := make([]int64, 0, len(ids))
+		for i, contentID := range ids {
+			if before, ok := previous[contentID]; ok && counts[i] > before {
+				deltaIDs = append(deltaIDs, contentID)
+				deltas = append(deltas, counts[i]-before)
+			}
 		}
-		if readErr == nil && count > previous {
+		if len(deltaIDs) > 0 {
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO content_stats_daily (content_id, day, plays)
-				VALUES ($1, (now() AT TIME ZONE 'Asia/Shanghai')::date, $2)
+				SELECT t.content_id, (now() AT TIME ZONE 'Asia/Shanghai')::date, t.plays
+				FROM unnest($1::bigint[], $2::bigint[]) AS t(content_id, plays)
 				ON CONFLICT (content_id, day) DO UPDATE
 				  SET plays = content_stats_daily.plays + EXCLUDED.plays,
-				      updated_at = now()`, contentID, count-previous); err != nil {
+				      updated_at = now()`, deltaIDs, deltas); err != nil {
 				return fmt.Errorf("stats: content daily plays: %w", err)
 			}
 		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO content_counters (content_id, plays) VALUES ($1, $2)
+			INSERT INTO content_counters (content_id, plays)
+			SELECT t.content_id, t.plays
+			FROM unnest($1::bigint[], $2::bigint[]) AS t(content_id, plays)
 			ON CONFLICT (content_id) DO UPDATE
-			  SET plays = EXCLUDED.plays, updated_at = now()`, contentID, count); err != nil {
+			  SET plays = EXCLUDED.plays, updated_at = now()`, ids, counts); err != nil {
 			return fmt.Errorf("stats: content counters: %w", err)
 		}
 	}

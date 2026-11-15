@@ -222,13 +222,30 @@ func (r *Repository) SetContentTopics(ctx context.Context, contentID, authorID i
 		return nil, ErrNotDraft
 	}
 
-	for _, id := range unique {
+	// 一次查回全部话题状态，校验在内存里做：SQL 次数不随话题数增长。
+	rows, err := tx.Query(ctx, `SELECT id, status FROM topics WHERE id = ANY($1)`, unique)
+	if err != nil {
+		return nil, fmt.Errorf("content: check topics: %w", err)
+	}
+	states := make(map[int64]string, len(unique))
+	for rows.Next() {
+		var topicID int64
 		var status string
-		if err := tx.QueryRow(ctx, `SELECT status FROM topics WHERE id = $1`, id).Scan(&status); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, ErrTopicNotFound
-			}
-			return nil, fmt.Errorf("content: check topic: %w", err)
+		if err := rows.Scan(&topicID, &status); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("content: scan topic status: %w", err)
+		}
+		states[topicID] = status
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("content: check topics: %w", err)
+	}
+	rows.Close()
+	for _, topicID := range unique {
+		status, ok := states[topicID]
+		if !ok {
+			return nil, ErrTopicNotFound
 		}
 		if status != "available" {
 			return nil, ErrTopicUnavailable
@@ -237,11 +254,12 @@ func (r *Repository) SetContentTopics(ctx context.Context, contentID, authorID i
 	if _, err := tx.Exec(ctx, `DELETE FROM content_topics WHERE content_id = $1`, contentID); err != nil {
 		return nil, fmt.Errorf("content: clear content topics: %w", err)
 	}
-	for _, id := range unique {
+	if len(unique) > 0 {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO content_topics (content_id, topic_id) VALUES ($1, $2)
-			ON CONFLICT DO NOTHING`, contentID, id); err != nil {
-			return nil, fmt.Errorf("content: attach topic: %w", err)
+			INSERT INTO content_topics (content_id, topic_id)
+			SELECT $1, unnest($2::bigint[])
+			ON CONFLICT DO NOTHING`, contentID, unique); err != nil {
+			return nil, fmt.Errorf("content: attach topics: %w", err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

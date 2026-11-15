@@ -213,15 +213,21 @@ func SaveConfig(ctx context.Context, db *pgxpool.Pool, adminID int64, cfg Config
 		{"gif.klipy_limit", strconv.Itoa(normalized.KlipyLimit)},
 		{"gif.klipy_cache_days", strconv.Itoa(normalized.KlipyCacheDays)},
 	}
+	// 11 个键一次 upsert，不按配置项逐条发 SQL。
+	keys := make([]string, 0, len(pairs))
+	values := make([]string, 0, len(pairs))
 	for _, pair := range pairs {
-		if _, err := db.Exec(ctx, `
-			INSERT INTO system_settings (key, value, updated_by, updated_at)
-			VALUES ($1, $2, $3, now())
-			ON CONFLICT (key) DO UPDATE SET
-			  value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-			pair[0], pair[1], adminID); err != nil {
-			return normalized, fmt.Errorf("gifs: save %s: %w", pair[0], err)
-		}
+		keys = append(keys, pair[0])
+		values = append(values, pair[1])
+	}
+	if _, err := db.Exec(ctx, `
+		INSERT INTO system_settings (key, value, updated_by, updated_at)
+		SELECT t.k, t.v, $3, now()
+		FROM unnest($1::text[], $2::text[]) AS t(k, v)
+		ON CONFLICT (key) DO UPDATE SET
+		  value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+		keys, values, adminID); err != nil {
+		return normalized, fmt.Errorf("gifs: save config: %w", err)
 	}
 	return normalized, nil
 }
