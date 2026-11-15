@@ -380,7 +380,7 @@ async function submitAppeal() {
       <!-- 顶部资料区：渐变横幅 + 头像 + 计数 + 账号标识 -->
       <header v-if="profile" class="hero" aria-label="本人资料">
         <div class="hero-top">
-          <NuxtLink to="/" class="back"><ImIcon name="back" :size="14" /> 首页</NuxtLink>
+          <NuxtLink to="/" class="back" aria-label="回到首页">←</NuxtLink>
           <nav class="quick" aria-label="常用入口">
             <NuxtLink to="/studio">创作中心</NuxtLink>
             <NuxtLink to="/me/drafts">草稿箱</NuxtLink>
@@ -575,11 +575,12 @@ async function submitAppeal() {
 }
 .hero-top, .hero-body { position: relative; z-index: 1; max-width: 1560px; margin: 0 auto; }
 .hero-top { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+/* 与搜索 / 消息 / 个人库等页面同一套圆形边框返回钮，不再用纯文字链接。 */
 .back {
-  display: inline-flex; align-items: center; gap: 3px;
-  color: rgba(255, 255, 255, 0.72); text-decoration: none; font-size: 12px;
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--vp-im-text-primary); text-decoration: none;
 }
-.back:hover { color: #fff; }
 .quick { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .quick a {
   padding: 5px 12px; border-radius: 99px; font-size: 12px; text-decoration: none;
