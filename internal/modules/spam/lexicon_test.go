@@ -23,3 +23,15 @@ func TestLexiconURLIsSingleFile(t *testing.T) {
 		t.Fatalf("不该下载整包或多个词库: %s", got)
 	}
 }
+
+// 后台「词库位置」应该指向仓库里的目录页（不是文件、不是 API）。
+func TestLexiconSourceURL(t *testing.T) {
+	want := "https://github.com/konsheng/Sensitive-lexicon/tree/main/Vocabulary/" +
+		url.PathEscape("微信输入法")
+	if got := LexiconSourceURL(); got != want {
+		t.Fatalf("词库位置 = %q, want %q", got, want)
+	}
+	if strings.Contains(LexiconSourceURL(), ".txt") {
+		t.Fatal("词库位置应该是目录，不该指向单个文件")
+	}
+}

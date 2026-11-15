@@ -39,6 +39,24 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.30.1] - 2026-11-15
+
+### 改进
+
+- **后台词库改为「词库位置」并支持更新对比**：`AdminFeatureFlags.vue` 不再显示
+  词库文件名，改成 `Vocabulary/微信输入法` 可点击链接（新标签页打开仓库目录）；
+  新增「更新」按钮，与「下载词库」共用
+  `POST /api/v1/admin/settings/spam/lexicon`。
+- `internal/modules/spam`：`SyncLexicon` 先读 GitHub contents 的 blob sha，与本地
+  `spam.lexicon_remote_sha` 比对，相同直接返回 `changed=false`（不下载、不写库、
+  不重建词表）；不同才下载并重编译。GitHub 接口不可达时退化为下载后比内容
+  sha256（`spam.lexicon_digest`），内容一致同样不重复写库。仍然只拉取
+  `Vocabulary/微信输入法/微信输入法内置词库26.11.7.txt` 这一个文件。
+- 接口返回 `downloaded.changed`，前端据此提示「词库已下载 / 词库已更新 /
+  词库已是最新」，不再出现「点了更新但看不出有没有变化」。
+- `.tools/headless-test/m88-spam-control.js`：35 项全过（新增词库位置链接与
+  `target="_blank"`、文件名不再出现、二次「更新」识别为已最新且不写库）。
+
 ## [0.30.0] - 2026-11-15
 
 ### 新增

@@ -25,24 +25,32 @@ type Config struct {
 	LexiconText  string `json:"-"`
 	LexiconWords int    `json:"lexicon_words"`
 	LexiconAt    string `json:"lexicon_at"`
-	Revision     string `json:"-"`
+	// LexiconRemoteSHA 是远端 blob sha，用来先比后下；LexiconDigest 是内容 sha256，
+	// 在 GitHub 接口不可达时兜底对比，避免重复下载与误报更新。
+	LexiconRemoteSHA string `json:"-"`
+	LexiconDigest    string `json:"-"`
+	Revision         string `json:"-"`
 }
 
 // Public 是不含词库全文、可以下发给后台页面的视图。
 type Public struct {
 	Enabled      bool   `json:"enabled"`
 	Words        string `json:"words"`
-	LexiconName  string `json:"lexicon_name"`
 	LexiconWords int    `json:"lexicon_words"`
 	LexiconAt    string `json:"lexicon_at"`
 	Installed    bool   `json:"installed"`
+	// 后台只显示可点击的「词库位置」，不再显示文件名。
+	LexiconSource      string `json:"lexicon_source"`
+	LexiconSourceLabel string `json:"lexicon_source_label"`
 }
 
 func (c Config) Public() Public {
 	return Public{
-		Enabled: c.Enabled, Words: c.Words, LexiconName: c.LexiconName,
+		Enabled: c.Enabled, Words: c.Words,
 		LexiconWords: c.LexiconWords, LexiconAt: c.LexiconAt,
-		Installed: strings.TrimSpace(c.LexiconText) != "",
+		Installed:          strings.TrimSpace(c.LexiconText) != "",
+		LexiconSource:      LexiconSourceURL(),
+		LexiconSourceLabel: lexiconDir,
 	}
 }
 
@@ -72,6 +80,10 @@ func LoadConfig(ctx context.Context, db *pgxpool.Pool) (Config, error) {
 			cfg.LexiconWords, _ = strconv.Atoi(value)
 		case "spam.lexicon_at":
 			cfg.LexiconAt = value
+		case "spam.lexicon_remote_sha":
+			cfg.LexiconRemoteSHA = value
+		case "spam.lexicon_digest":
+			cfg.LexiconDigest = value
 		case "spam.revision":
 			cfg.Revision = value
 		}
@@ -98,17 +110,22 @@ func SaveConfig(ctx context.Context, db *pgxpool.Pool, adminID int64,
 
 // SaveLexicon 写入下载好的词库全文，并记录词条数与时间。
 func SaveLexicon(ctx context.Context, db *pgxpool.Pool, adminID int64,
-	name, text string, wordCount int, at string) (Config, error) {
+	name, text string, wordCount int, at, remoteSHA, digest string) (Config, error) {
 	cfg, err := LoadConfig(ctx, db)
 	if err != nil {
 		return cfg, err
 	}
-	return cfg, savePairs(ctx, db, adminID, cfg, map[string]string{
-		"spam.lexicon_name":  name,
-		"spam.lexicon_text":  text,
-		"spam.lexicon_words": strconv.Itoa(wordCount),
-		"spam.lexicon_at":    at,
-	})
+	pairs := map[string]string{
+		"spam.lexicon_name":   name,
+		"spam.lexicon_text":   text,
+		"spam.lexicon_words":  strconv.Itoa(wordCount),
+		"spam.lexicon_at":     at,
+		"spam.lexicon_digest": digest,
+	}
+	if remoteSHA != "" {
+		pairs["spam.lexicon_remote_sha"] = remoteSHA
+	}
+	return cfg, savePairs(ctx, db, adminID, cfg, pairs)
 }
 
 // savePairs 递增 revision 并 upsert；revision 是编译缓存的失效信号。

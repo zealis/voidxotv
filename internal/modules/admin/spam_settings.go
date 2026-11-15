@@ -54,7 +54,7 @@ func (h *Handler) updateSpamConfig(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) downloadSpamLexicon(w http.ResponseWriter, r *http.Request) {
 	principal, _ := principalFrom(r.Context())
-	result, err := spam.Download(r.Context(), h.repo.db, principal.AdminID)
+	result, err := spam.SyncLexicon(r.Context(), h.repo.db, principal.AdminID)
 	if err != nil {
 		// 外部依赖失败是可操作提示，不是「操作失败」这种系统故障。
 		httpserver.Error(w, http.StatusBadRequest, "lexicon_download_failed", err.Error(),
@@ -62,7 +62,8 @@ func (h *Handler) downloadSpamLexicon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.audit(r, "settings.spam.lexicon", "system_setting", "spam", nil,
-		map[string]any{"name": result.Name, "words": result.Words, "bytes": result.Bytes})
+		map[string]any{"name": result.Name, "words": result.Words,
+			"bytes": result.Bytes, "changed": result.Changed})
 	cfg, err := spam.LoadConfig(r.Context(), h.repo.db)
 	if err != nil {
 		h.writeError(w, r, err)

@@ -74,10 +74,12 @@ async function save() {
 interface SpamConfig {
   enabled: boolean
   words: string
-  lexicon_name: string
   lexicon_words: number
   lexicon_at: string
   installed: boolean
+  /** 词库位置（仓库目录）与展示用路径；不显示文件名。 */
+  lexicon_source: string
+  lexicon_source_label: string
 }
 
 interface SpamTestResult {
@@ -87,12 +89,12 @@ interface SpamTestResult {
 }
 
 const spam = reactive<SpamConfig>({
-  enabled: false, words: '', lexicon_name: '', lexicon_words: 0,
-  lexicon_at: '', installed: false,
+  enabled: false, words: '', lexicon_words: 0, lexicon_at: '', installed: false,
+  lexicon_source: '', lexicon_source_label: '',
 })
 const spamError = ref('')
 const spamSaving = ref(false)
-const downloading = ref(false)
+const lexiconBusy = ref(false)
 const testText = ref('')
 const testBusy = ref(false)
 const testResult = ref<SpamTestResult | null>(null)
@@ -128,21 +130,24 @@ async function saveSpam() {
   }
 }
 
-async function downloadLexicon() {
-  if (downloading.value) return
-  downloading.value = true
+// 下载与更新走同一个接口：服务端先比远端 sha，内容一致就返回 changed=false。
+async function syncLexicon(mode: 'download' | 'update') {
+  if (lexiconBusy.value) return
+  lexiconBusy.value = true
   spamError.value = ''
   try {
-    const data = await request<{ config: SpamConfig }>('/api/v1/admin/settings/spam/lexicon', {
-      method: 'POST', body: {}, csrf: true,
-    })
+    const data = await request<{ config: SpamConfig; downloaded: { changed: boolean } }>(
+      '/api/v1/admin/settings/spam/lexicon', { method: 'POST', body: {}, csrf: true },
+    )
     Object.assign(spam, data.config)
-    ElMessage.success('词库已下载')
+    const changed = !!data.downloaded?.changed
+    if (changed) ElMessage.success(mode === 'update' ? '词库已更新' : '词库已下载')
+    else ElMessage.success('词库已是最新')
   } catch (cause) {
     spamError.value = adminReason(cause)
     ElMessage.error(spamError.value)
   } finally {
-    downloading.value = false
+    lexiconBusy.value = false
   }
 }
 
@@ -265,10 +270,16 @@ onMounted(() => { void load(); void loadSpam() })
           placeholder="一行一个" :disabled="!writable"
         />
 
-        <label>词库</label>
+        <label>词库位置</label>
         <div class="lexicon">
+          <a
+            v-if="spam.lexicon_source" :href="spam.lexicon_source"
+            target="_blank" rel="noopener noreferrer"
+          >{{ spam.lexicon_source_label }}</a>
+        </div>
+        <div class="lexicon-state">
           <span v-if="spam.installed">
-            {{ spam.lexicon_name }} · {{ spam.lexicon_words.toLocaleString() }} 条词
+            已下载 {{ spam.lexicon_words.toLocaleString() }} 条词
             <template v-if="spam.lexicon_at">
               · {{ new Date(spam.lexicon_at).toLocaleDateString('zh-CN') }}
             </template>
@@ -276,9 +287,14 @@ onMounted(() => { void load(); void loadSpam() })
           <span v-else>尚未下载</span>
         </div>
         <div class="actions">
-          <ElButton :loading="downloading" :disabled="!writable || downloading" @click="downloadLexicon">
-            下载词库
-          </ElButton>
+          <ElButton
+            :loading="lexiconBusy" :disabled="!writable || lexiconBusy"
+            @click="syncLexicon('download')"
+          >下载词库</ElButton>
+          <ElButton
+            :disabled="!writable || lexiconBusy"
+            @click="syncLexicon('update')"
+          >更新</ElButton>
         </div>
 
         <label>测试</label>
@@ -337,6 +353,9 @@ onMounted(() => { void load(); void loadSpam() })
   max-width: 560px; font-size: 13px; color: #f4f4f5;
 }
 .lexicon { font-size: 12px; color: #d4d4d8; }
+.lexicon a { color: #e4e4e7; text-decoration: underline; text-underline-offset: 2px; }
+.lexicon a:hover { opacity: 0.8; }
+.lexicon-state { font-size: 12px; color: #8b8b93; }
 .test-result { margin: 0; font-size: 12px; color: #4ade80; }
 .test-result.blocked { color: #ff6961; }
 .error { margin: 0; font-size: 12px; color: #ff6961; }

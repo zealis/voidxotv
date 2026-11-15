@@ -10,7 +10,7 @@ import (
 func TestPublicHidesLexiconText(t *testing.T) {
 	cfg := Config{
 		Enabled: true, Words: "cnm", LexiconText: "一行敏感词\n另一行",
-		LexiconName: lexiconName, LexiconWords: 2,
+		LexiconName: lexiconFile, LexiconWords: 2,
 	}
 	raw, err := json.Marshal(cfg.Public())
 	if err != nil {
