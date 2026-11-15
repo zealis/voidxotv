@@ -39,6 +39,22 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.28.1] - 2026-11-15
+
+### 改进
+
+- **右侧操作栏图标 hover 动效**：`apps/web/app/components/immersive/ActionRail.vue`
+  给点赞 / 评论 / 收藏 / 分享四颗图标各加一组短促 keyframes（心跳缩放、轻弹、
+  旋转、轻推，420–520ms 一次性），鼠标悬浮时播放、移开即取消。
+  用纯 CSS 而不是示例里的 GSAP CDN：项目没有该依赖，外链脚本会多一个 CSP
+  例外与一次外部请求；动画只作用于圆底内 `svg` 的 `transform`，不改布局、
+  不改变按钮命中区，也不影响已有 `:active` / `.active` 状态。
+  `@media (hover: hover)` 限定有悬停能力的设备，触屏不会把 `:hover` 粘住；
+  `prefers-reduced-motion: reduce` 下完全禁用。
+  - `.tools/headless-test/m82-rail-hover.js`：23 项全过（四个图标各自的
+    animationName 与 transform、按钮几何不跳、移开取消、评论按钮仍能打开
+    抽屉、减少动态效果下禁用、无前端异常）。
+
 ## [0.28.0] - 2026-11-15
 
 ### 新增

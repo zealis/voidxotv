@@ -114,26 +114,26 @@ onBeforeUnmount(() => {
     </div>
 
     <button
-      type="button" class="action" :class="{ active: props.liked }"
+      type="button" class="action act-like" :class="{ active: props.liked }"
       :aria-pressed="props.liked" aria-label="点赞"
       @click="emit('like')"
     >
       <span class="bubble"><ImIcon name="heart" :size="24" filled /></span>
       <span class="count">{{ props.label(props.counts.likes) }}</span>
     </button>
-    <button type="button" class="action" aria-label="查看评论" @click="emit('comment')">
+    <button type="button" class="action act-comment" aria-label="查看评论" @click="emit('comment')">
       <span class="bubble"><ImIcon name="comment" :size="24" filled /></span>
       <span class="count">{{ props.label(props.counts.comments) }}</span>
     </button>
     <button
-      type="button" class="action" :class="{ active: props.favorited }"
+      type="button" class="action act-favorite" :class="{ active: props.favorited }"
       :aria-pressed="props.favorited" aria-label="收藏"
       @click="emit('favorite')"
     >
       <span class="bubble"><ImIcon name="star" :size="24" filled /></span>
       <span class="count">{{ props.label(props.counts.favorites) }}</span>
     </button>
-    <button type="button" class="action" aria-label="分享" @click="emit('share')">
+    <button type="button" class="action act-share" aria-label="分享" @click="emit('share')">
       <span class="bubble"><ImIcon name="share" :size="24" filled /></span>
       <span class="count">{{ props.label(props.counts.shares) }}</span>
     </button>
@@ -257,6 +257,43 @@ onBeforeUnmount(() => {
   transition: background var(--vp-im-motion-standard) var(--vp-ease-out);
 }
 .bubble :deep(svg) { filter: drop-shadow(0 1px 2px rgba(10, 10, 31, 0.35)); }
+/* ── 悬浮图标动画 ──────────────────────────────────────────────
+   四个动作各一个短促动效，纯 CSS keyframes：项目没有动画库，挂 GSAP 到 CDN
+   只会多一个 CSP 例外与外部请求。只动圆底里的 svg，用 transform 不改布局、
+   不扩大命中区；@media (hover:hover) 避免触屏把 :hover 粘住。 */
+.action .bubble :deep(svg) { transform-origin: center; }
+@media (hover: hover) {
+  .act-like:hover .bubble :deep(svg) { animation: rail-heart 460ms var(--vp-ease-out) both; }
+  .act-comment:hover .bubble :deep(svg) { animation: rail-comment 420ms var(--vp-ease-out) both; }
+  .act-favorite:hover .bubble :deep(svg) { animation: rail-star 520ms var(--vp-ease-out) both; }
+  .act-share:hover .bubble :deep(svg) { animation: rail-share 420ms var(--vp-ease-out) both; }
+}
+@keyframes rail-heart {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.26) rotate(-6deg); }
+  55% { transform: scale(0.94) rotate(3deg); }
+  78% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@keyframes rail-comment {
+  0%, 100% { transform: translateY(0); }
+  35% { transform: translateY(-4px) scale(1.08); }
+  70% { transform: translateY(1px); }
+}
+@keyframes rail-star {
+  0% { transform: rotate(0) scale(1); }
+  35% { transform: rotate(-18deg) scale(1.2); }
+  70% { transform: rotate(10deg) scale(1.04); }
+  100% { transform: rotate(0) scale(1); }
+}
+@keyframes rail-share {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  35% { transform: translate(4px, -3px) rotate(8deg); }
+  70% { transform: translate(-2px, 1px) rotate(-4deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action:hover .bubble :deep(svg) { animation: none; }
+}
 .action.active .bubble { background: var(--vp-im-action-disc-bg-active); }
 .count {
   font-size: 12px;
