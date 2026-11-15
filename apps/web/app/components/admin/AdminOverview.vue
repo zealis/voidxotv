@@ -161,7 +161,7 @@ const cards = computed(() => {
             <span class="badge">近 7 日 · 每小时重算</span>
           </header>
           <ElEmpty v-if="!hot.length" description="暂无榜单数据" :image-size="72" />
-          <ElTable v-else :data="hot" size="small" class="hot-table">
+          <ElTable v-else :data="hot" size="small" class="admin-table hot-table">
             <ElTableColumn prop="rank" label="#" width="44" />
             <ElTableColumn label="作品" min-width="140">
               <template #default="scope">
@@ -184,6 +184,28 @@ const cards = computed(() => {
               </template>
             </ElTableColumn>
           </ElTable>
+
+          <!-- 窄屏卡片：榜单不再横向滚动，标题与计数完整可读。 -->
+          <div v-if="hot.length" class="admin-cards">
+            <article v-for="row in hot" :key="row.rank" class="admin-card">
+              <header class="admin-card-head">
+                <div>
+                  <div class="admin-card-title">#{{ row.rank }} {{ row.title || '（无标题）' }}</div>
+                  <div class="admin-card-sub">@{{ row.handle }}</div>
+                </div>
+                <div class="admin-card-tags">
+                  <AdminStatusTag
+                    :text="row.status === 'approved' ? '已上架' : '审核中'"
+                    :tone="row.status === 'approved' ? 'positive' : 'attention'"
+                  />
+                </div>
+              </header>
+              <dl class="admin-card-meta">
+                <div><dt>播放</dt><dd>{{ formatCount(row.plays) }}</dd></div>
+                <div><dt>点赞</dt><dd>{{ formatCount(row.likes) }}</dd></div>
+              </dl>
+            </article>
+          </div>
         </section>
       </div>
     </template>

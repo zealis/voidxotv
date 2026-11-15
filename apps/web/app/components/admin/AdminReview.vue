@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {
-  ElButton, ElDialog, ElEmpty, ElInput, ElMessage, ElTable, ElTableColumn,
+  ElButton, ElCheckbox, ElDialog, ElEmpty, ElInput, ElMessage, ElTable, ElTableColumn,
 } from 'element-plus'
 import type { AdminReviewItem } from '~/composables/useAdminApi'
 
@@ -47,6 +47,13 @@ function rowClass({ row }: { row: unknown }) {
 
 function onSelection(rows: unknown[]) {
   selected.value = (rows || []) as AdminReviewItem[]
+}
+
+// 窄屏卡片没有 ElTable 的 selection 列，用勾选框维护同一份 selected，
+// 保证批量通过按钮在卡片模式下依然可用。
+function onCardCheck(row: AdminReviewItem, value: unknown) {
+  const rest = selected.value.filter((item) => item.content_id !== row.content_id)
+  selected.value = Boolean(value) ? [...rest, row] : rest
 }
 
 async function decide(raw: unknown, action: string, reason = '') {
@@ -162,7 +169,7 @@ const statusText: Record<string, string> = {
 
     <ElTable
       v-else v-loading="loading" :data="items" :row-class-name="rowClass"
-      size="default" class="review-table" @selection-change="onSelection"
+      size="default" class="admin-table review-table" @selection-change="onSelection"
     >
       <ElTableColumn type="selection" width="42" />
       <ElTableColumn label="作品" min-width="240">
@@ -229,6 +236,62 @@ const statusText: Record<string, string> = {
       </ElTableColumn>
     </ElTable>
 
+    <!-- 窄屏卡片：勾选框接管表格的多选，批量通过按钮继续可用。 -->
+    <div v-if="!error && items.length" class="admin-cards">
+      <article v-for="row in items" :key="row.content_id" class="admin-card">
+        <header class="admin-card-head">
+          <div class="card-lead">
+            <ElCheckbox
+              :model-value="selected.some((item) => item.content_id === row.content_id)"
+              @change="onCardCheck(row, $event)"
+            />
+            <div>
+              <div class="admin-card-title">
+                <a :href="detailLink(row)" target="_blank" rel="noopener">
+                  {{ row.title || '（无标题）' }}
+                </a>
+              </div>
+              <div class="admin-card-sub">
+                @{{ row.handle }} · {{ row.type === 'image' ? '图集' : '视频' }}
+              </div>
+            </div>
+          </div>
+          <div class="admin-card-tags">
+            <AdminStatusTag
+              :text="statusText[row.review_status] || row.review_status"
+              :tone="reviewTone[row.review_status]"
+            />
+          </div>
+        </header>
+        <dl class="admin-card-meta">
+          <div><dt>等待</dt><dd>{{ waitLabel(row.waiting_minutes) }}</dd></div>
+          <div><dt>风险分</dt><dd>{{ row.risk_score }}</dd></div>
+          <div>
+            <dt>风险标签</dt>
+            <dd>{{ row.risk_labels?.length ? row.risk_labels.join('、') : '—' }}</dd>
+          </div>
+        </dl>
+        <div class="admin-card-actions">
+          <ElButton
+            v-if="can('reviews:decide')" size="small" type="primary" plain
+            :loading="busyId === row.content_id" @click="decide(row, 'approve')"
+          >通过</ElButton>
+          <ElButton
+            v-if="can('reviews:decide')" size="small" type="danger" plain
+            @click="openReasonDialog(row, 'reject')"
+          >驳回</ElButton>
+          <ElButton
+            v-if="can('reviews:decide')" size="small" type="danger"
+            @click="openReasonDialog(row, 'take_down')"
+          >下架</ElButton>
+          <ElButton
+            v-if="can('reviews:decide')" size="small" plain
+            @click="decide(row, 'limit')"
+          >限流</ElButton>
+        </div>
+      </article>
+    </div>
+
     <ElDialog v-model="dialog.open" :title="dialog.action === 'reject' ? '驳回作品' : '下架作品'" width="460px">
       <p class="dialog-tip">
         理由会写入审计日志并通知作者；{{ dialog.action === 'take_down' ? '下架后立即退出 feed 与落地页。' : '作者可在收到通知后申诉。' }}
@@ -272,6 +335,8 @@ const statusText: Record<string, string> = {
 .state p { margin: 0; }
 .review-table { --el-table-bg-color: transparent; --el-table-tr-bg-color: transparent; }
 :deep(.high-risk) { background: rgba(255, 46, 126, 0.08) !important; }
+.card-lead { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.card-lead :deep(.el-checkbox) { margin-right: 0; flex: none; }
 .cell { display: flex; gap: 10px; align-items: center; }
 .cell img, .thumb {
   width: 56px; height: 56px; border-radius: 10px; object-fit: cover;

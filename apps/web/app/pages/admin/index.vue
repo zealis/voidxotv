@@ -100,7 +100,8 @@ onBeforeUnmount(() => {
       </nav>
 
       <div class="nav-footer">
-        <div class="admin-card">
+        <!-- 侧栏会话卡片不用 .admin-card：那是全局列表卡片的类名，会多画一圈边框。 -->
+        <div class="session-card">
           <span class="avatar">{{ session.email.slice(0, 1).toUpperCase() }}</span>
           <div class="admin-meta">
             <strong>{{ session.email }}</strong>
@@ -185,7 +186,7 @@ onBeforeUnmount(() => {
 .nav-item:hover .nav-mark { color: #e4e4e7; }
 .nav-item.on .nav-mark { background: rgba(255, 46, 126, 0.28); color: #fff; }
 .nav-footer { margin-top: auto; display: grid; gap: 8px; }
-.admin-card {
+.session-card {
   display: flex; gap: 8px; align-items: center;
   padding: 8px 10px; border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);

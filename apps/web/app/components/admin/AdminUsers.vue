@@ -140,7 +140,7 @@ const statusMeta: Record<string, { text: string; tone: Tone }> = {
     <ElEmpty v-else-if="!loading && !items.length" description="没有匹配的用户" :image-size="96" />
 
     <template v-else>
-      <ElTable v-loading="loading" :data="items" size="default" class="user-table">
+      <ElTable v-loading="loading" :data="items" size="default" class="admin-table user-table">
         <ElTableColumn label="账号" min-width="140">
           <template #default="scope">
             <div class="handle">@{{ scope.row.handle }}</div>
@@ -181,15 +181,16 @@ const statusMeta: Record<string, { text: string; tone: Tone }> = {
         </ElTableColumn>
     </ElTable>
 
-    <!-- 窄屏走卡片：表格有 7 列 + 右侧固定列，挤到 390px 会互相压字。 -->
-    <div v-loading="loading" class="user-cards">
-      <article v-for="row in items" :key="row.id" class="user-card">
-        <header class="card-head">
+    <!-- 窄屏走卡片：表格有 7 列 + 右侧固定列，挤到 390px 会互相压字。
+         样式在 assets/css/admin-cards.css，全后台共用一套断点与外壳。 -->
+    <div v-loading="loading" class="admin-cards">
+      <article v-for="row in items" :key="row.id" class="admin-card">
+        <header class="admin-card-head">
           <div>
-            <div class="handle">@{{ row.handle }}</div>
-            <div class="sub">ID {{ row.id }}</div>
+            <div class="admin-card-title">@{{ row.handle }}</div>
+            <div class="admin-card-sub">ID {{ row.id }}</div>
           </div>
-          <div class="card-tags">
+          <div class="admin-card-tags">
             <AdminStatusTag
               :text="row.role === 'creator' ? '创作者' : '用户'"
               :tone="row.role === 'creator' ? 'positive' : 'neutral'"
@@ -200,7 +201,7 @@ const statusMeta: Record<string, { text: string; tone: Tone }> = {
             />
           </div>
         </header>
-        <dl class="card-meta">
+        <dl class="admin-card-meta">
           <div><dt>作品</dt><dd>{{ row.content_count }}</dd></div>
           <div>
             <dt>最近处置</dt>
@@ -257,30 +258,12 @@ const statusMeta: Record<string, { text: string; tone: Tone }> = {
 .user-table { --el-table-bg-color: transparent; --el-table-tr-bg-color: transparent; }
 .handle { font-size: 13px; font-weight: 600; color: #f4f4f5; }
 .sub { font-size: 11px; color: #8b8b93; }
-/* 窄屏卡片列表：默认隐藏，≤860px 与同名断点一起接管（对齐后台外框的折叠点）。 */
-.user-cards { display: none; }
-.user-card {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-}
-.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.card-tags { display: flex; flex: none; gap: 6px; }
-.card-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; }
-.card-meta > div { display: flex; align-items: baseline; gap: 6px; }
-.card-meta dt { font-size: 11px; color: #8b8b93; }
-.card-meta dd { margin: 0; font-size: 12px; color: #d4d4d8; }
+/* 卡片外壳与 ≤1160px 断点统一在 assets/css/admin-cards.css，
+   这里只留表格 / 弹窗专用样式。 */
 .dialog-tip { margin: 0 0 12px; font-size: 12px; line-height: 1.7; color: #a1a1aa; }
 .dialog-error { margin: 8px 0 0; font-size: 12px; color: #fb7185; }
 
 /* 表格 7 列最小宽度合计约 868px：加上侧栏 220 与主区内边距，窗口窄到这个尺寸以下
-   就会横向滚动，右侧固定列随即压住「最近处置 / 注册时间」。所以 1160 起才用表格，
-   更窄一律卡片——卡片不依赖列宽，任何宽度都能读。 */
-@media (max-width: 1160px) {
-  .user-table { display: none; }
-  .user-cards { display: grid; gap: 10px; }
-}
+   就会横向滚动，右侧固定列随即压住「最近处置 / 注册时间」。1160px 的切换规则
+   见 admin-cards.css 的 .admin-table / .admin-cards。 */
 </style>

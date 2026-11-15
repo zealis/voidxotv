@@ -132,7 +132,7 @@ async function toggle(raw: unknown) {
     </div>
     <ElEmpty v-else-if="!loading && !items.length" description="暂无分类" :image-size="72" />
 
-    <ElTable v-else v-loading="loading" :data="items" size="small">
+    <ElTable v-else v-loading="loading" :data="items" size="small" class="admin-table">
       <ElTableColumn label="名称" min-width="140">
         <template #default="{ row }">
           <strong class="name">{{ row.name }}</strong>
@@ -162,6 +162,37 @@ async function toggle(raw: unknown) {
         </template>
       </ElTableColumn>
     </ElTable>
+
+    <!-- 窄屏卡片：分类说明与操作按钮不再被列宽挤压。 -->
+    <div v-if="!error && items.length" class="admin-cards">
+      <article v-for="row in items" :key="row.id" class="admin-card">
+        <header class="admin-card-head">
+          <div>
+            <div class="admin-card-title">{{ row.name }}</div>
+            <div class="admin-card-sub">{{ row.slug }} · ID {{ row.id }}</div>
+          </div>
+          <div class="admin-card-tags">
+            <AdminStatusTag
+              :text="row.status === 'available' ? '已上线' : '已隐藏'"
+              :tone="row.status === 'available' ? 'positive' : 'neutral'"
+            />
+          </div>
+        </header>
+        <dl class="admin-card-meta">
+          <div><dt>说明</dt><dd>{{ row.description || '—' }}</dd></div>
+          <div><dt>排序</dt><dd>{{ row.position }}</dd></div>
+          <div><dt>内容数</dt><dd>{{ row.content_count }}</dd></div>
+        </dl>
+        <div v-if="can('settings:write')" class="admin-card-actions">
+          <ElButton size="small" plain type="primary" @click="openEdit(row)">编辑</ElButton>
+          <ElButton
+            size="small" plain :type="row.status === 'available' ? 'warning' : 'success'"
+            @click="toggle(row)"
+          >{{ row.status === 'available' ? '隐藏' : '上线' }}</ElButton>
+        </div>
+        <span v-else class="admin-card-sub">只读</span>
+      </article>
+    </div>
 
     <ElDialog v-model="dialog.open" :title="dialog.item ? '编辑分类' : '新建分类'" width="440px">
       <div class="form">

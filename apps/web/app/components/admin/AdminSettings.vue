@@ -419,7 +419,7 @@ function formatBytes(value: number): string {
           <span class="badge">密钥仅服务端</span>
         </header>
         <ElEmpty v-if="!connectors.length" description="暂无 Connector" :image-size="72" />
-        <ElTable v-else :data="connectors" size="small" class="table">
+        <ElTable v-else :data="connectors" size="small" class="admin-table table">
           <ElTableColumn label="名称" min-width="150">
             <template #default="scope">
               <div class="strong">{{ scope.row.name }}</div>
@@ -462,6 +462,38 @@ function formatBytes(value: number): string {
             </template>
           </ElTableColumn>
         </ElTable>
+
+        <!-- 窄屏卡片：Connector 状态与能力按行铺开，不被列宽截断。 -->
+        <div v-if="connectors.length" class="admin-cards">
+          <article v-for="row in connectors" :key="row.slug" class="admin-card">
+            <header class="admin-card-head">
+              <div>
+                <div class="admin-card-title">{{ row.name }}</div>
+                <div class="admin-card-sub">{{ row.slug }} · {{ row.kind }}</div>
+              </div>
+              <div class="admin-card-tags">
+                <AdminStatusTag
+                  :text="connectorStatus[row.status]?.text || row.status"
+                  :tone="connectorStatus[row.status]?.tone"
+                />
+              </div>
+            </header>
+            <dl class="admin-card-meta">
+              <div><dt>密钥</dt><dd>{{ row.secret_configured ? '已配置' : '未配置' }}</dd></div>
+              <div>
+                <dt>能力</dt>
+                <dd>{{ row.allow_direct_play ? '直连播放' : '' }} {{ row.allow_import ? '下载导入' : '' }} {{ !row.allow_direct_play && !row.allow_import ? '未授权' : '' }}</dd>
+              </div>
+              <div>
+                <dt>最近刷新</dt>
+                <dd>{{ row.last_refresh_at ? new Date(row.last_refresh_at).toLocaleString('zh-CN', { hour12: false }) : '—' }}</dd>
+              </div>
+            </dl>
+            <div v-if="can('connectors:write')" class="admin-card-actions">
+              <ElButton size="small" plain @click="refreshConnector(row)">刷新</ElButton>
+            </div>
+          </article>
+        </div>
       </section>
 
       <section class="panel">
@@ -470,7 +502,7 @@ function formatBytes(value: number): string {
           <span class="badge">下载与转码由 Worker 执行</span>
         </header>
         <ElEmpty v-if="!imports.length" description="暂无导入任务" :image-size="72" />
-        <ElTable v-else :data="imports" size="small" class="table">
+        <ElTable v-else :data="imports" size="small" class="admin-table table">
           <ElTableColumn prop="id" label="#" width="56" />
           <ElTableColumn label="外部 ID" min-width="140">
             <template #default="scope">
@@ -488,6 +520,23 @@ function formatBytes(value: number): string {
             <template #default="scope"><span class="sub">{{ scope.row.last_error || '—' }}</span></template>
           </ElTableColumn>
         </ElTable>
+
+        <!-- 窄屏卡片：导入任务的错误信息完整显示。 -->
+        <div v-if="imports.length" class="admin-cards">
+          <article v-for="row in imports" :key="row.id" class="admin-card">
+            <header class="admin-card-head">
+              <div>
+                <div class="admin-card-title">#{{ row.id }} {{ row.external_id || '—' }}</div>
+                <div class="admin-card-sub">{{ row.source_url || '由 Connector 解析' }}</div>
+              </div>
+            </header>
+            <dl class="admin-card-meta">
+              <div><dt>状态</dt><dd>{{ jobStatusText[row.status] || row.status }}</dd></div>
+              <div><dt>大小</dt><dd>{{ formatBytes(row.byte_size) }}</dd></div>
+              <div><dt>错误</dt><dd>{{ row.last_error || '—' }}</dd></div>
+            </dl>
+          </article>
+        </div>
       </section>
 
       <section v-if="can('audit:read')" class="panel">
@@ -505,7 +554,7 @@ function formatBytes(value: number): string {
           <ElButton size="small" :disabled="!auditCursor" @click="loadAudit(false)">加载更多</ElButton>
         </div>
         <ElEmpty v-if="!audit.length" description="该筛选下暂无审计记录" :image-size="72" />
-        <ElTable v-else :data="audit" size="small" class="table">
+        <ElTable v-else :data="audit" size="small" class="admin-table table">
           <ElTableColumn label="时间" width="160">
             <template #default="scope">
               {{ new Date(scope.row.created_at).toLocaleString('zh-CN', { hour12: false }) }}
@@ -518,6 +567,25 @@ function formatBytes(value: number): string {
             <template #default="scope">{{ scope.row.object_type }} #{{ scope.row.object_id }}</template>
           </ElTableColumn>
         </ElTable>
+
+        <!-- 窄屏卡片：审计日志按行铺开，不再依赖横向滚动。 -->
+        <div v-if="audit.length" class="admin-cards">
+          <article v-for="(row, index) in audit" :key="`${row.created_at}-${index}`" class="admin-card">
+            <header class="admin-card-head">
+              <div>
+                <div class="admin-card-title">{{ row.admin_email }}</div>
+                <div class="admin-card-sub">
+                  {{ new Date(row.created_at).toLocaleString('zh-CN', { hour12: false }) }}
+                </div>
+              </div>
+              <div class="admin-card-tags"><span class="admin-card-sub">{{ row.role }}</span></div>
+            </header>
+            <dl class="admin-card-meta">
+              <div><dt>动作</dt><dd>{{ row.action }}</dd></div>
+              <div><dt>对象</dt><dd>{{ row.object_type }} #{{ row.object_id }}</dd></div>
+            </dl>
+          </article>
+        </div>
       </section>
     </template>
   </section>

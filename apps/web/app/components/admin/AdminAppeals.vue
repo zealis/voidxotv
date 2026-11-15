@@ -107,7 +107,7 @@ const reviewText: Record<string, string> = {
     </div>
     <ElEmpty v-else-if="!loading && !items.length" description="暂无待处理申诉" :image-size="96" />
 
-    <ElTable v-else v-loading="loading" :data="items" size="default">
+    <ElTable v-else v-loading="loading" :data="items" size="default" class="admin-table">
       <ElTableColumn label="作品" min-width="220">
         <template #default="{ row }">
           <a :href="detailLink(row)" target="_blank" rel="noopener" class="title">
@@ -143,6 +143,42 @@ const reviewText: Record<string, string> = {
         </template>
       </ElTableColumn>
     </ElTable>
+
+    <!-- 窄屏卡片：申诉理由与处置理由完整展示，不再被列宽截断。 -->
+    <div v-if="!error && items.length" class="admin-cards">
+      <article v-for="row in items" :key="row.id" class="admin-card">
+        <header class="admin-card-head">
+          <div>
+            <div class="admin-card-title">
+              <a :href="detailLink(row)" target="_blank" rel="noopener">
+                {{ row.title || '（无标题）' }}
+              </a>
+            </div>
+            <div class="admin-card-sub">@{{ row.handle }} · {{ row.slug }}</div>
+          </div>
+          <div class="admin-card-tags">
+            <AdminStatusTag
+              :text="reviewText[row.review_status] || row.review_status" tone="danger"
+            />
+          </div>
+        </header>
+        <dl class="admin-card-meta">
+          <div><dt>原处置理由</dt><dd>{{ row.decision_reason || '（未填写理由）' }}</dd></div>
+          <div><dt>申诉理由</dt><dd>{{ row.reason }}</dd></div>
+        </dl>
+        <div class="admin-card-actions">
+          <ElButton
+            v-if="can('reviews:decide')" size="small" type="primary"
+            :loading="busyId === row.id" @click="openDialog(row, true)"
+          >通过</ElButton>
+          <ElButton
+            v-if="can('reviews:decide')" size="small" type="danger" plain
+            :disabled="busyId === row.id" @click="openDialog(row, false)"
+          >驳回</ElButton>
+          <span v-if="!can('reviews:decide')" class="admin-card-sub">只读</span>
+        </div>
+      </article>
+    </div>
 
     <ElDialog v-model="dialog.open" :title="dialog.approve ? '通过申诉' : '驳回申诉'" width="460px">
       <p class="dialog-tip">

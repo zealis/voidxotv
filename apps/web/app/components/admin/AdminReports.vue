@@ -130,7 +130,7 @@ function typeLabel(type: string): string {
     </div>
     <ElEmpty v-else-if="!loading && !items.length" description="暂无举报单" :image-size="96" />
 
-    <ElTable v-else v-loading="loading" :data="items" size="default" class="report-table">
+    <ElTable v-else v-loading="loading" :data="items" size="default" class="admin-table report-table">
       <ElTableColumn label="对象" min-width="200">
         <template #default="scope">
           <div class="obj">
@@ -177,6 +177,46 @@ function typeLabel(type: string): string {
         </template>
       </ElTableColumn>
     </ElTable>
+
+    <!-- 窄屏卡片：对象标题可跳转，操作按钮不再被 fixed 列挤扁。 -->
+    <div v-if="!error && items.length" class="admin-cards">
+      <article v-for="row in items" :key="row.id" class="admin-card">
+        <header class="admin-card-head">
+          <div>
+            <div class="admin-card-title">
+              <a
+                v-if="row.object_path" :href="row.object_path"
+                target="_blank" rel="noopener noreferrer"
+              >{{ objectLabel(row.object_type, row.object_title) }}</a>
+              <span v-else>{{ objectLabel(row.object_type, row.object_title) }}</span>
+            </div>
+            <div class="admin-card-sub">{{ typeLabel(row.object_type) }} #{{ row.object_id }}</div>
+          </div>
+          <div class="admin-card-tags">
+            <AdminStatusTag
+              :text="statusMeta[row.status]?.text || row.status"
+              :tone="statusMeta[row.status]?.tone"
+            />
+          </div>
+        </header>
+        <dl class="admin-card-meta">
+          <div><dt>举报次数</dt><dd>{{ row.report_count }}</dd></div>
+          <div><dt>主要理由</dt><dd>{{ reasonLabels[row.top_reason] || row.top_reason }}</dd></div>
+          <div>
+            <dt>开单</dt>
+            <dd>{{ new Date(row.opened_at).toLocaleString('zh-CN', { hour12: false }) }}</dd>
+          </div>
+          <div><dt>处置说明</dt><dd>{{ row.resolution || '—' }}</dd></div>
+        </dl>
+        <div class="admin-card-actions">
+          <ElButton
+            v-if="can('reports:resolve') && row.status === 'pending'"
+            size="small" type="primary" @click="openDialog(row)"
+          >处置</ElButton>
+          <span v-else class="admin-card-sub">{{ row.status === 'pending' ? '无权限' : '已处置' }}</span>
+        </div>
+      </article>
+    </div>
 
     <ElDialog v-model="dialog.open" title="处置举报单" width="480px">
       <div class="dialog-body">

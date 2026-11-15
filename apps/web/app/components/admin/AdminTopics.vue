@@ -138,7 +138,7 @@ async function setPlacement(raw: unknown, placement: string, enabled = true) {
     </div>
     <ElEmpty v-else-if="!loading && !items.length" description="暂无话题" :image-size="96" />
 
-    <ElTable v-else v-loading="loading" :data="items" size="default" class="topic-table">
+    <ElTable v-else v-loading="loading" :data="items" size="default" class="admin-table topic-table">
       <ElTableColumn label="话题" min-width="200">
         <template #default="scope">
           <div class="name">#{{ scope.row.name }}</div>
@@ -187,6 +187,51 @@ async function setPlacement(raw: unknown, placement: string, enabled = true) {
         </template>
       </ElTableColumn>
     </ElTable>
+
+    <!-- 窄屏卡片：与表格同一批数据、同一组操作函数，避免 fixed 操作列挤压按钮。 -->
+    <div v-if="!error && items.length" class="admin-cards">
+      <article v-for="row in items" :key="row.id" class="admin-card">
+        <header class="admin-card-head">
+          <div>
+            <div class="admin-card-title">#{{ row.name }}</div>
+            <div class="admin-card-sub">{{ row.slug }} · ID {{ row.id }}</div>
+          </div>
+          <div class="admin-card-tags">
+            <AdminStatusTag
+              :text="statusMeta[row.status]?.text || row.status"
+              :tone="statusMeta[row.status]?.tone"
+            />
+          </div>
+        </header>
+        <dl class="admin-card-meta">
+          <div><dt>作品数</dt><dd>{{ row.content_count }}</dd></div>
+          <div>
+            <dt>运营位</dt>
+            <dd>{{ row.placement === 'featured' ? '推荐' : row.placement === 'pinned' ? '置顶' : '—' }}</dd>
+          </div>
+        </dl>
+        <div v-if="can('topics:write')" class="admin-card-actions">
+          <ElButton
+            v-if="row.status === 'pending'" size="small" type="primary" plain
+            @click="setStatus(row, 'available')"
+          >通过审核</ElButton>
+          <ElButton
+            v-if="row.status === 'available'" size="small" plain
+            @click="setStatus(row, 'offline')"
+          >下线</ElButton>
+          <ElButton
+            v-if="row.status === 'offline'" size="small" plain
+            @click="setStatus(row, 'available')"
+          >恢复</ElButton>
+          <ElButton size="small" plain @click="setPlacement(row, 'featured', !row.featured)">
+            {{ row.featured ? '取消推荐' : '推荐' }}
+          </ElButton>
+          <ElButton size="small" plain @click="setPlacement(row, 'pinned')">置顶</ElButton>
+          <ElButton size="small" plain type="danger" @click="openMerge(row)">合并</ElButton>
+        </div>
+        <span v-else class="admin-card-sub">只读角色</span>
+      </article>
+    </div>
 
     <ElDialog v-model="createDialog.open" title="新建话题" width="420px">
       <div class="dialog-body">

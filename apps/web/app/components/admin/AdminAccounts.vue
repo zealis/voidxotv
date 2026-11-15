@@ -224,7 +224,10 @@ const isSelf = (raw: unknown) => (raw as AccountRow).id === session.value?.id
 
     <p v-if="error" class="error">{{ error }}</p>
 
-    <ElTable v-loading="loading" :data="items" empty-text="暂无账号" size="small" row-key="id">
+    <ElTable
+      v-loading="loading" :data="items" empty-text="暂无账号"
+      size="small" row-key="id" class="admin-table"
+    >
       <ElTableColumn prop="email" label="邮箱" min-width="220">
         <template #default="{ row }">
           <span class="name">{{ row.email }}</span>
@@ -278,6 +281,47 @@ const isSelf = (raw: unknown) => (raw as AccountRow).id === session.value?.id
         </template>
       </ElTableColumn>
     </ElTable>
+
+    <!-- 窄屏卡片：角色下拉、停用与重置密码都保留在卡片内。 -->
+    <div v-if="items.length" class="admin-cards">
+      <article v-for="row in items" :key="row.id" class="admin-card">
+        <header class="admin-card-head">
+          <div>
+            <div class="admin-card-title">{{ row.email }}</div>
+            <div v-if="isSelf(row)" class="admin-card-sub">当前登录</div>
+          </div>
+          <div class="admin-card-tags">
+            <AdminStatusTag
+              :text="row.status === 'active' ? '启用' : '停用'"
+              :tone="row.status === 'active' ? 'positive' : 'neutral'"
+            />
+          </div>
+        </header>
+        <div class="card-role">
+          <span class="admin-card-sub">角色</span>
+          <ElSelect
+            v-if="writable && !isSelf(row)"
+            :model-value="row.role" size="small" :disabled="saving === row.id"
+            @change="(value: string) => changeRole(row, value)"
+          >
+            <ElOption v-for="role in roles" :key="role" :value="role" :label="roleLabels[role]" />
+          </ElSelect>
+          <span v-else class="role-text">{{ roleLabels[row.role] || row.role }}</span>
+        </div>
+        <dl class="admin-card-meta">
+          <div><dt>创建时间</dt><dd>{{ formatTime(row.created_at) }}</dd></div>
+        </dl>
+        <div v-if="writable" class="admin-card-actions">
+          <ElButton size="small" plain type="primary" @click="openReset(row)">重置密码</ElButton>
+          <ElButton
+            v-if="!isSelf(row)" size="small" plain
+            :type="row.status === 'active' ? 'danger' : 'success'"
+            :loading="saving === row.id" @click="toggleStatus(row)"
+          >{{ row.status === 'active' ? '停用' : '启用' }}</ElButton>
+        </div>
+        <span v-else class="admin-card-sub">只读角色</span>
+      </article>
+    </div>
 
     <p class="note">
       改角色 / 停用 / 重置密码会立即吊销该账号的全部会话；不能停用或降级自己，
@@ -336,6 +380,9 @@ const isSelf = (raw: unknown) => (raw as AccountRow).id === session.value?.id
 .self-tag { margin-left: 8px; }
 .opt { display: inline-block; min-width: 72px; }
 .opt-hint { font-style: normal; font-size: 11px; color: #8b8b93; }
+.card-role { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.card-role :deep(.el-select) { width: min(220px, 100%); }
+.role-text { font-size: 12px; color: #d4d4d8; }
 .note { margin: 0; font-size: 12px; line-height: 1.6; color: #8b8b93; }
 .error { margin: 0; font-size: 12px; color: #ff6961; }
 .form { display: grid; gap: 8px; }

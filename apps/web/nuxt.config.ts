@@ -29,7 +29,7 @@ export default defineNuxtConfig({
     { path: '~/components/publish', pathPrefix: false },
     '~/components',
   ],
-  css: ['~/assets/css/tokens.css'],
+  css: ['~/assets/css/tokens.css', '~/assets/css/admin-cards.css'],
 
   runtimeConfig: {
     // 服务端读取；浏览器只拿到 public 下的非敏感值。
