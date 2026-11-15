@@ -436,6 +436,9 @@ func (h *Handler) reorderImages(w http.ResponseWriter, r *http.Request) {
 
 // DELETE /api/v1/contents/{id}/images/{assetID} —— 删单张并把剩余 position 压成连续。
 func (h *Handler) removeImage(w http.ResponseWriter, r *http.Request) {
+	if !h.auth.RequireStepUp(w, r) {
+		return
+	}
 	id, ok := pathID(w, r)
 	if !ok {
 		return

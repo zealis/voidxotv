@@ -135,6 +135,9 @@ func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) setAccountRole(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
 		h.writeError(w, r, ErrInvalidInput)
@@ -194,6 +197,9 @@ func (h *Handler) setAccountRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) setAccountStatus(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
 		h.writeError(w, r, ErrInvalidInput)
@@ -252,6 +258,9 @@ func (h *Handler) setAccountStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) resetAccountPassword(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
 		h.writeError(w, r, ErrInvalidInput)

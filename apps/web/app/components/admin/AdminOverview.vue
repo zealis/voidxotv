@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ElButton, ElEmpty, ElSkeleton, ElSkeletonItem, ElTable, ElTableColumn } from 'element-plus'
+import {
+  ElButton, ElEmpty, ElMessage, ElSkeleton, ElSkeletonItem, ElTable, ElTableColumn,
+} from 'element-plus'
 import type {
   AdminHotItem, AdminOverview, AdminReviewItem, AdminTrendPoint,
 } from '~/composables/useAdminApi'
 
 const emit = defineEmits<{ 'open-review': [contentId: number] }>()
-const { request } = useAdminApi()
+const { request, can } = useAdminApi()
 
 const loading = ref(true)
 const error = ref('')
@@ -36,6 +38,22 @@ async function load() {
 }
 
 onMounted(load)
+
+// 重算榜单属于敏感操作：服务端要求二次确认，request() 会自动弹密码框并重试。
+const aggregating = ref(false)
+async function reaggregate() {
+  if (aggregating.value) return
+  aggregating.value = true
+  try {
+    await request('/api/v1/admin/stats/aggregate', { method: 'POST', body: {}, csrf: true })
+    ElMessage.success('榜单已重算')
+    await load()
+  } catch (cause) {
+    ElMessage.error(cause instanceof Error ? cause.message : '重算失败')
+  } finally {
+    aggregating.value = false
+  }
+}
 
 function formatCount(value: number | null | undefined): string {
   const number = Number(value || 0)
@@ -158,7 +176,13 @@ const cards = computed(() => {
         <section class="panel">
           <header class="panel-head">
             <h3>热门作品 TOP</h3>
-            <span class="badge">近 7 日 · 每小时重算</span>
+            <div class="panel-actions">
+              <span class="badge">近 7 日 · 每小时重算</span>
+              <ElButton
+                v-if="can('stats:aggregate')" size="small" :loading="aggregating"
+                @click="reaggregate"
+              >重算</ElButton>
+            </div>
           </header>
           <ElEmpty v-if="!hot.length" description="暂无榜单数据" :image-size="72" />
           <ElTable v-else :data="hot" size="small" class="admin-table hot-table">
@@ -254,6 +278,7 @@ const cards = computed(() => {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 10px;
 }
+.panel-actions { display: flex; align-items: center; gap: 10px; }
 .panel-head h3 { margin: 0; font-size: 14px; font-weight: 600; color: #f4f4f5; }
 .badge {
   padding: 2px 8px; border-radius: 99px; font-size: 11px;

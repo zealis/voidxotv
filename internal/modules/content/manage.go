@@ -146,6 +146,10 @@ func (h *Handler) manage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
+	// 删除作品属于敏感操作：要求重新验证过密码（5 分钟内有效）。
+	if !h.auth.RequireStepUp(w, r) {
+		return
+	}
 	id, ok := pathID(w, r)
 	if !ok {
 		return
@@ -228,6 +232,9 @@ type batchDeleteRequest struct {
 }
 
 func (h *Handler) batchRemove(w http.ResponseWriter, r *http.Request) {
+	if !h.auth.RequireStepUp(w, r) {
+		return
+	}
 	var request batchDeleteRequest
 	if err := httpserver.DecodeJSON(r, &request); err != nil {
 		h.writeError(w, r, err)

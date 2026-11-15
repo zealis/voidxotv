@@ -156,27 +156,52 @@ export function useAdminApi() {
     if (options.csrf && session.value?.csrf_token) {
       headers['X-CSRF-Token'] = session.value.csrf_token
     }
+    const send = (extra: Record<string, string> = {}) => $fetch<{ data: T }>(path, {
+      method: options.method || 'GET',
+      body: options.body as Record<string, unknown> | undefined,
+      headers: { ...headers, ...extra },
+      credentials: 'same-origin',
+    })
     try {
-      const payload = await $fetch<{ data: T }>(path, {
-        method: options.method || 'GET',
-        body: options.body as Record<string, unknown> | undefined,
-        headers,
-        credentials: 'same-origin',
-      })
-      return payload.data
-    } catch (error) {
-      const status = (error as { status?: number; response?: { status?: number } }).status
-        || (error as { response?: { status?: number } }).response?.status
-      if (status === 401) session.value = null
-      const body = (error as { data?: { error?: { message?: string } } }).data
-      // 后台同样不向界面暴露 HTTP 状态、英文内部错误等开发术语。
-      // 后台错误形如 `admin: invalid input: 中文说明`：先剥掉英文前缀再判可读性，
-      // 否则中文说明会被下面的技术词过滤（invalid）连坐，只剩一句「请求失败」。
-      const raw = (body?.error?.message || '').replace(/^admin:[^:]*:\s*/, '')
-      const clean = raw && /[\u4e00-\u9fff]/.test(raw)
-        && !/HTTP|CSRF|token|sql|undefined|null|internal|unexpected|invalid|timeout/i.test(raw)
-      throw new Error(clean ? raw : '请求失败，请稍后再试')
+      return (await send()).data
+    } catch (first) {
+      // 后台的处置 / 恢复 / 停用 / 重置密码 / 重算榜单要求二次确认：
+      // 弹密码框（开了 TOTP 再补验证码），拿到令牌后自动重试一次。
+      const status = statusOf(first)
+      const body = bodyOf(first)
+      if (status === 403 && body?.error?.code === 'step_up_required') {
+        const token = await useStepUp().ensure('admin', '此操作需要重新验证身份')
+        if (token) {
+          try {
+            return (await send({ 'X-Step-Up-Token': token })).data
+          } catch (second) {
+            throw normalize(second)
+          }
+        }
+      }
+      throw normalize(first)
     }
+  }
+
+  function statusOf(error: unknown): number | undefined {
+    return (error as { status?: number }).status
+      || (error as { response?: { status?: number } }).response?.status
+  }
+
+  function bodyOf(error: unknown): { error?: { code?: string; message?: string } } | undefined {
+    return (error as { data?: { error?: { code?: string; message?: string } } }).data
+  }
+
+  // 后台同样不向界面暴露 HTTP 状态、英文内部错误等开发术语。
+  // 后台错误形如 `admin: invalid input: 中文说明`：先剥掉英文前缀再判可读性，
+  // 否则中文说明会被下面的技术词过滤（invalid）连坐，只剩一句「请求失败」。
+  function normalize(error: unknown): Error {
+    const status = statusOf(error)
+    if (status === 401) session.value = null
+    const raw = (bodyOf(error)?.error?.message || '').replace(/^admin:[^:]*:\s*/, '')
+    const clean = raw && /[\u4e00-\u9fff]/.test(raw)
+      && !/HTTP|CSRF|token|sql|undefined|null|internal|unexpected|invalid|timeout/i.test(raw)
+    return new Error(clean ? raw : '请求失败，请稍后再试')
   }
 
   async function login(email: string, password: string, totpCode?: string): Promise<void> {

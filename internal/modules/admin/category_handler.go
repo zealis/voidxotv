@@ -47,6 +47,9 @@ func (h *Handler) upsertCategory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) setCategoryStatus(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
 		h.writeError(w, r, ErrInvalidInput)

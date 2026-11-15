@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElButton } from 'element-plus'
+import { ElButton, ElMessageBox } from 'element-plus'
 import 'element-plus/dist/index.css'
 // Element Plus 的深色变量只在引入该文件后才会随 .dark 生效。
 import 'element-plus/theme-chalk/dark/css-vars.css'
@@ -49,6 +49,14 @@ function openReview(contentId: number) {
 }
 
 async function signOut() {
+  // 退出是降权操作，不需要再输密码，但要有明确确认，避免误点或被脚本顺手带走。
+  try {
+    await ElMessageBox.confirm('退出后需要重新输入邮箱和密码才能进入后台。', '确认退出登录', {
+      confirmButtonText: '退出', cancelButtonText: '取消', type: 'warning',
+    })
+  } catch {
+    return
+  }
   await logout()
   active.value = 'overview'
 }
@@ -131,6 +139,8 @@ onBeforeUnmount(() => {
       <AdminAccounts v-else-if="active === 'accounts'" />
       <p v-else class="empty">当前角色没有可访问的模块。</p>
     </main>
+    <!-- 后台敏感操作（处置 / 封禁 / 合并 / 停用 / 重置密码 / 重算）的身份确认。 -->
+    <StepUpDialog />
   </div>
 </template>
 

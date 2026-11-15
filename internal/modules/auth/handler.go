@@ -55,6 +55,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/auth/logout", h.RequireAuth(h.RequireCSRF(http.HandlerFunc(h.logout))))
 	mux.Handle("GET /api/v1/auth/me", h.RequireAuth(http.HandlerFunc(h.me)))
 	mux.Handle("GET /api/v1/auth/csrf", h.RequireAuth(http.HandlerFunc(h.csrf)))
+	// 敏感操作二次确认：重新输入密码换 5 分钟令牌，删除类接口要求带上。
+	mux.Handle("POST /api/v1/auth/step-up", h.RequireAuth(h.RequireCSRF(http.HandlerFunc(h.stepUp))))
 	// 找回密码（§11.7）：公开端点，频控在处理器内做。
 	mux.HandleFunc("GET /api/v1/auth/captcha", h.captcha)
 	mux.HandleFunc("POST /api/v1/auth/password/reset-request", h.resetRequestCode)

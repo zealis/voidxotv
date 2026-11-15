@@ -98,6 +98,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/admin/accounts/{id}/password", h.wrap(PermAccountWrite, true, h.resetAccountPassword))
 	// 自助改密：任何已登录账号都能改自己的口令。
 	mux.Handle("POST /api/v1/admin/auth/password", h.wrapSelf(h.changeOwnPassword))
+	// 敏感操作二次确认：重新输入后台密码（启用了 TOTP 还要验证码），换 5 分钟令牌。
+	mux.Handle("POST /api/v1/admin/auth/step-up", h.wrapSelf(h.stepUp))
 
 	// 分类配置（§4.7 系统设置）：变更会触发关联页再验证。
 	mux.Handle("GET /api/v1/admin/categories", h.wrap(PermSettingsRead, false, h.categories))
@@ -249,6 +251,9 @@ func (h *Handler) hot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) aggregate(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	if h.aggregator == nil {
 		h.writeError(w, r, ErrConflict)
 		return
@@ -311,6 +316,9 @@ type decisionRequest struct {
 }
 
 func (h *Handler) decide(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		h.writeError(w, r, ErrInvalidInput)
@@ -334,6 +342,9 @@ func (h *Handler) decide(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) batchApprove(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	var request struct {
 		IDs []int64 `json:"ids"`
 	}
@@ -376,6 +387,9 @@ type resolveReportRequest struct {
 }
 
 func (h *Handler) resolveReport(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	caseID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		h.writeError(w, r, ErrInvalidInput)
@@ -435,6 +449,9 @@ type sanctionRequest struct {
 }
 
 func (h *Handler) sanctionUser(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	userID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		h.writeError(w, r, ErrInvalidInput)
@@ -490,6 +507,9 @@ func (h *Handler) createTopic(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) setTopicStatus(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		h.writeError(w, r, ErrInvalidInput)
@@ -512,6 +532,9 @@ func (h *Handler) setTopicStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) mergeTopics(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	sourceID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		h.writeError(w, r, ErrInvalidInput)
@@ -536,6 +559,9 @@ func (h *Handler) mergeTopics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) topicPlacement(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	var request struct {
 		TopicID     int64  `json:"topic_id"`
 		Placement   string `json:"placement"`

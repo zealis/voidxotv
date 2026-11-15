@@ -351,6 +351,9 @@ func (h *Handler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 // DELETE /api/v1/me/avatar —— 清空头像，前端回落到占位图。
 func (h *Handler) deleteAvatar(w http.ResponseWriter, r *http.Request) {
+	if !h.auth.RequireStepUp(w, r) {
+		return
+	}
 	principal, _ := auth.PrincipalFromContext(r.Context())
 	ctx := r.Context()
 	old, err := h.repo.AvatarKey(ctx, principal.UserID)

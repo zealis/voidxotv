@@ -89,6 +89,10 @@ func (h *Handler) myComments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) removeComment(w http.ResponseWriter, r *http.Request) {
+	// 作者删评论同样要求二次确认，避免会话被劫持后批量清空讨论。
+	if !h.auth.RequireStepUp(w, r) {
+		return
+	}
 	contentID, err := contentID(r)
 	if err != nil {
 		h.fail(w, r, err)

@@ -30,6 +30,8 @@ useHead(() => ({
   <NuxtPage />
   <!-- 登录 / 注册弹窗挂在这里：前台任何页面都能唤起，不打断当前内容。 -->
   <VpAuthDialog />
+  <!-- 删除作品 / 评论 / 图片 / 头像前的身份确认。 -->
+  <StepUpDialog />
 </template>
 
 <style>

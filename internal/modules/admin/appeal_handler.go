@@ -26,6 +26,9 @@ func (h *Handler) appeals(w http.ResponseWriter, r *http.Request) {
 
 // decideAppeal accepts (restore content) or rejects one appeal.
 func (h *Handler) decideAppeal(w http.ResponseWriter, r *http.Request) {
+	if !h.requireStepUp(w, r) {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
 		h.writeError(w, r, ErrInvalidInput)

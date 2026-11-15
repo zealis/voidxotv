@@ -50,14 +50,24 @@ export function useApi() {
       headers['Content-Type'] = 'application/json'
     }
 
-    const response = await fetch(path, {
-      method,
-      headers,
-      credentials: 'include',
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal,
+    const body = options.body === undefined ? undefined : JSON.stringify(options.body)
+    const send = () => fetch(path, {
+      method, headers, credentials: 'include', body, signal: options.signal,
     })
-    const payload = (await response.json().catch(() => null)) as Envelope<T> | null
+    let response = await send()
+    let payload = (await response.json().catch(() => null)) as Envelope<T> | null
+
+    // 敏感操作（删除作品 / 评论 / 图片 / 头像）：服务端要求二次确认时，
+    // 弹密码框拿 5 分钟令牌，然后自动重试一次原请求。
+    if (response.status === 403 && payload?.error?.code === 'step_up_required') {
+      const token = await useStepUp().ensure('user', '此操作需要重新验证身份')
+      if (token) {
+        headers['X-Step-Up-Token'] = token
+        response = await send()
+        payload = (await response.json().catch(() => null)) as Envelope<T> | null
+      }
+    }
+
     if (!response.ok) {
       throw new ApiError(
         response.status,
