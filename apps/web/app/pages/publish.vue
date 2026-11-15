@@ -4,6 +4,7 @@ useSeoMeta({ robots: 'noindex,nofollow' })
 // 视频字节由浏览器经预签名 URL 直传对象存储，不经过 Go API 或 Nuxt。
 // 链路：票据 → 分片 PUT(ETag) → 幂等完成 → Worker 转码 → 填写元数据 → 发布 → 播放签名。
 interface Me { user_id: number; handle: string; roles: string[] }
+interface Profile { handle: string; display_name: string; avatar_url: string }
 interface PresignedPart { part_number: number; url: string }
 interface Ticket {
   upload_job_id: number; content_id: number; object_key: string; upload_id: string
@@ -33,6 +34,7 @@ const ALLOWED_MIME = new Set([
 const MAX_BYTES = 2 * 1024 * 1024 * 1024
 
 const me = ref<Me | null>(null)
+const profile = ref<Profile | null>(null)
 const checking = ref(true)
 const file = ref<File | null>(null)
 const title = ref('')
@@ -88,6 +90,8 @@ onMounted(async () => {
   me.value = await getMe()
   checking.value = false
   if (!me.value) return
+  // 侧栏展示真实昵称与头像；拉不到时回退到「用户 + 夜街号」与首字母。
+  void loadProfile()
   // 隐私设置里的「新作品默认可见性」在这里生效；单条作品仍可改。
   await loadPreferences()
   visibility.value = preferences.value.defaultVisibility
@@ -497,10 +501,19 @@ function requestSignOut() {
   signOutTimer = setTimeout(() => { confirmSignOut.value = false }, 3000)
 }
 
+async function loadProfile() {
+  try {
+    profile.value = await api<Profile>('/api/v1/me/profile')
+  } catch {
+    // 头像 / 昵称加载失败不影响发布，侧栏回退到夜街号。
+  }
+}
+
 async function signOut() {
   try { await logout() } catch { /* session may already be gone */ }
   clearCsrf()
   me.value = null
+  profile.value = null
 }
 </script>
 
@@ -517,15 +530,21 @@ async function signOut() {
           <span class="nav-icon" aria-hidden="true">◎</span>同城<em>即将开放</em>
         </span>
         <NuxtLink to="/messages" class="nav-item"><span class="nav-icon" aria-hidden="true">✉</span>消息</NuxtLink>
+        <NuxtLink to="/studio" class="nav-item"><span class="nav-icon" aria-hidden="true">▤</span>创作中心</NuxtLink>
         <NuxtLink to="/me" class="nav-item"><span class="nav-icon" aria-hidden="true">◉</span>我</NuxtLink>
       </nav>
       <NuxtLink to="/publish?new=1" class="rail-cta">＋ 发布作品</NuxtLink>
       <div class="rail-user">
         <template v-if="me">
-          <span class="avatar">{{ me.handle.slice(0, 1).toUpperCase() }}</span>
+          <span class="avatar">
+            <img v-if="profile?.avatar_url" :src="profile.avatar_url" alt="" />
+            <template v-else>{{ (profile?.display_name || me.handle).slice(0, 1).toUpperCase() }}</template>
+          </span>
           <div class="rail-user-text">
-            <strong>夜街号：{{ me.handle }}</strong>
-            <NuxtLink to="/studio">创作中心</NuxtLink>
+            <strong>{{ profile?.display_name || `用户${me.handle}` }}</strong>
+            <div class="rail-user-meta">
+              <span>夜街号 {{ me.handle }}</span>
+            </div>
           </div>
           <button
             type="button" class="sign-out" :class="{ danger: confirmSignOut }"
@@ -541,7 +560,6 @@ async function signOut() {
     <main class="stage-col">
       <header class="stage-head">
         <h1>发布作品</h1>
-        <p>视频自动转码为 HLS / MP4 并生成封面与预览索引；图集最多 18 张、首图为封面。</p>
       </header>
 
       <section v-if="checking" class="gate">正在检查登录状态…</section>
@@ -563,7 +581,7 @@ async function signOut() {
             :class="{ on: mode === 'image' }" :disabled="busy"
             @click="setMode('image')"
           >图集</button>
-          <span class="mode-hint">{{ mode === 'image' ? '2–18 张图片，首图为封面' : '单条视频，自动转码' }}</span>
+          <span class="mode-hint">{{ mode === 'image' ? '2–18 张图片，首图为封面' : '单条视频' }}</span>
         </div>
 
         <section class="work-area" aria-label="作品文件与预览">
@@ -584,7 +602,6 @@ async function signOut() {
               v-if="localPreviewUrl" class="local-preview" controls playsinline
               :src="localPreviewUrl" @loadedmetadata="onPreviewMetadata"
             />
-            <p class="note">媒体字节由浏览器直传对象存储；应用进程只签发 URL，不转发文件。选择后可在上方预览校验画面与声音。</p>
           </template>
           <template v-else>
             <ImageGalleryEditor
@@ -637,31 +654,14 @@ async function signOut() {
             <p v-if="published && publishedReview === 'pending'" class="review-hint">
               作品已提交审核，通过后会出现在公开页面；审核状态可在「我」页查看。
             </p>
-            <p>模式 {{ playback.mode }} · 签名 {{ playback.signed ? '30 分钟' : '公共 CDN' }} · {{ playback.files.length }} 个产物</p>
             <video
               v-if="playback.mode === 'mp4' && playback.media_url"
               class="preview-video" controls playsinline
               :poster="playback.poster_url" :src="playback.media_url"
             />
             <img v-else-if="playback.poster_url" class="preview-poster" :src="playback.poster_url" alt="封面预览" />
-            <p v-if="playback.mode === 'hls'" class="note">HLS 播放列表已生成并重写为绝对地址。</p>
-            <details>
-              <summary>产物清单</summary>
-              <ul>
-                <li v-for="item in playback.files" :key="item.key">
-                  <span class="kind">{{ item.kind }}</span>
-                  <span class="key">{{ item.key.split('/').slice(-2).join('/') }}</span>
-                  <span class="size">{{ formatBytes(item.byte_size) }}</span>
-                </li>
-              </ul>
-            </details>
           </div>
 
-          <h3 class="log-title">事件日志</h3>
-          <ul class="logs">
-            <li v-for="(line, index) in logs" :key="index">{{ line }}</li>
-            <li v-if="!logs.length" class="muted">尚无事件</li>
-          </ul>
         </section>
       </template>
     </main>
@@ -670,7 +670,6 @@ async function signOut() {
     <aside class="form-col" aria-label="作品信息表单">
       <div class="form-head">
         <h2>作品信息</h2>
-        <span>字段与设置同移动端</span>
       </div>
       <div v-if="checking || !me" class="form-gate">登录后即可填写作品信息与发布设置。</div>
       <div v-else class="form-body">
@@ -710,7 +709,7 @@ async function signOut() {
             {{ busy ? busyLabel : (mode === 'image' ? '发布图集' : '上传并发布') }}
           </button>
         </div>
-        <p class="note">编辑内容会自动保存为草稿；发布前不会进入公开页面或统计。</p>
+        <p class="note">编辑内容会自动保存为草稿。</p>
         <p v-if="errorText" class="error" role="alert">{{ errorText }}</p>
       </div>
     </aside>
@@ -757,9 +756,11 @@ async function signOut() {
   margin-top: auto; padding-top: 16px; border-top: 1px solid var(--vp-tool-border);
   display: flex; align-items: center; gap: 9px; font-size: 12px;
 }
-.avatar { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; background: var(--vp-color-brand); color: #fff; font-weight: 700; }
-.rail-user-text { display: grid; gap: 2px; min-width: 0; }
+.avatar { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; overflow: hidden; background: var(--vp-color-brand); color: #fff; font-weight: 700; }
+.avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.rail-user-text { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
 .rail-user-text strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-user-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--vp-tool-text-2); white-space: nowrap; }
 .rail-user-text a { font-size: 11px; color: var(--vp-tool-text-2); text-decoration: none; }
 .sign-out { flex: none; margin-left: auto; padding: 4px 7px; font-size: 10px; white-space: nowrap; border-radius: 6px; cursor: pointer; border: 1px solid var(--vp-tool-border-strong); background: transparent; color: var(--vp-tool-text-2); }
 .sign-out.danger { color: #ff6b5e; border-color: rgba(255, 107, 94, 0.5); }

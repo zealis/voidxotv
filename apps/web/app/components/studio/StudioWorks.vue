@@ -425,7 +425,7 @@ onBeforeUnmount(() => {
                 <span v-else class="cover-placeholder">暂无封面</span>
               </div>
               <div class="cover-copy">
-                <small>拖拽调整顺序，首图即封面；可增删图片，已发布作品保存后首页与详情页会一起更新。</small>
+                <small>拖拽调整顺序，首图即封面。</small>
                 <label class="btn gallery-add" :class="{ busy: galleryBusy }">
                   {{ galleryBusy ? '处理中…' : '添加图片' }}
                   <input

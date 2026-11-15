@@ -329,9 +329,7 @@ function onInputChange(event: Event) {
     </ul>
 
     <p v-if="hint" class="hint" role="status">{{ hint }}</p>
-    <p class="note">
-      图片顺序即沉浸流内左右横滑的顺序；除拖拽外也可用卡片上的左移 / 右移 / 设为封面按钮调整。
-    </p>
+    <p class="note">拖拽或用卡片按钮调整顺序，首图即封面。</p>
   </div>
 </template>
 
