@@ -44,6 +44,8 @@ const props = defineProps<{
   navHidden?: boolean
   /** 当前视频是否已放进「晚点再看」。 */
   watchlisted?: boolean
+  /** 键盘调音量时页面递增，用来把音量指示条临时唤出（只有激活卡片响应）。 */
+  volumeHint?: number
 }>()
 
 const emit = defineEmits<{
@@ -252,7 +254,10 @@ function togglePop(name: 'rate' | 'quality' | 'volume') {
 // 滑块浮在按钮上方 8px，鼠标走过去会先落进不属于任何元素的空隙并触发 mouseleave；
 // 立刻关弹层会让人永远碰不到滑块，所以给关闭留一段宽容期。
 const VOLUME_HOVER_GRACE = 300
+const VOLUME_HINT_VISIBLE = 1500
 let volumeCloseTimer: ReturnType<typeof setTimeout> | null = null
+let volumeHintTimer: ReturnType<typeof setTimeout> | null = null
+let volumeHintActive = false
 
 function cancelVolumeClose() {
   if (volumeCloseTimer) {
@@ -261,13 +266,45 @@ function cancelVolumeClose() {
   }
 }
 
+function clearVolumeHint() {
+  if (volumeHintTimer) {
+    clearTimeout(volumeHintTimer)
+    volumeHintTimer = null
+  }
+  volumeHintActive = false
+}
+
+// 键盘调音量不经过音量按钮的 hover：页面用 volumeHint 通知控制条临时把指示条
+// 唤出来，连按会重置计时，静手 1.5s 后自动收起。鼠标一接管就交回 hover 逻辑。
+function showVolumeHint() {
+  cancelVolumeClose()
+  clearVolumeHint()
+  openPop.value = 'volume'
+  // 鼠标此刻正停在音量按钮 / 指示条上时，关闭时机归 hover 管，不要定时收掉。
+  if (itemRoot.value?.querySelector('.pb-anchor-volume:hover')) return
+  volumeHintActive = true
+  volumeHintTimer = setTimeout(() => {
+    volumeHintTimer = null
+    if (volumeHintActive && openPop.value === 'volume') openPop.value = ''
+    volumeHintActive = false
+  }, VOLUME_HINT_VISIBLE)
+}
+
+// 沉浸流同时渲染 3 条，只让激活的那条弹；hint 从 0 起，未被键盘触发过就不响应。
+watch(() => props.volumeHint, (hint) => {
+  if (hint && props.active) showVolumeHint()
+})
+
 function onVolumeClick() {
   cancelVolumeClose()
+  clearVolumeHint()
   emit('muteToggle')
   openPop.value = ''
 }
 
 function hoverVolume(open: boolean) {
+  // 鼠标进入按钮 / 指示条即接管，取消键盘唤出的自动收起。
+  clearVolumeHint()
   cancelVolumeClose()
   if (open) {
     openPop.value = 'volume'
@@ -322,6 +359,7 @@ function onDocPointerDown(event: PointerEvent) {
 
 function onDocKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
+  clearVolumeHint()
   openPop.value = ''
   closeMobileDanmaku()
 }
@@ -339,6 +377,7 @@ watch([openPop, mobileDanmaku, danmakuEmojiOpen], ([pop, mobile, emoji]) => {
 // 切到另一条内容时浮层不能留在屏幕上。
 watch(() => props.item.id, () => {
   cancelVolumeClose()
+  clearVolumeHint()
   openPop.value = ''
   closeMobileDanmaku()
   stopGallery()
@@ -354,6 +393,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocPointerDown, true)
   document.removeEventListener('keydown', onDocKeydown, true)
   cancelVolumeClose()
+  clearVolumeHint()
   stopGallery()
 })
 
@@ -609,7 +649,7 @@ function onSeek(event: MouseEvent) {
         </button>
 
         <span
-          class="pb-anchor pb-secondary"
+          class="pb-anchor pb-secondary pb-anchor-volume"
           @mouseenter="hoverVolume(true)" @mouseleave="hoverVolume(false)"
         >
           <button
@@ -622,7 +662,7 @@ function onSeek(event: MouseEvent) {
           </button>
           <div
             v-if="openPop === 'volume'" class="pb-pop pb-pop-volume" role="group" aria-label="音量"
-            @mouseenter="cancelVolumeClose" @mouseleave="hoverVolume(false)"
+            @mouseenter="hoverVolume(true)" @mouseleave="hoverVolume(false)"
           >
             <input
               type="range" min="0" max="100" step="1"

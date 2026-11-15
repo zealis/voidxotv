@@ -229,11 +229,18 @@ async function onFavorite(entry: FeedItem) {
   }
 }
 
+// 键盘改音量时递增，通知控制条把音量指示条临时唤出。
+const volumeHint = ref(0)
+
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, [contenteditable="true"]') || sheetOpen.value) return
   // 左右 ±5 秒、上下 ±5% 音量；与首页沉浸流共用同一份实现。
-  if (handlePlayerArrowKeys(event, player)) return
+  const action = handlePlayerArrowKeys(event, player)
+  if (action) {
+    if (action === 'volume') volumeHint.value++
+    return
+  }
   if (event.key === ' ') { event.preventDefault(); void player.toggle() }
   if (event.key === 'm' || event.key === 'M') player.setMuted(!player.state.muted)
   if (event.key === 'f' || event.key === 'F') void player.toggleFullscreen()
@@ -280,6 +287,7 @@ onBeforeUnmount(() => {
             :counts="item.stats" :label="formatCount" :player="player.state"
             :caption="caption(item.description)" :tags="tags(item.description)"
             :expanded="expanded" :nav-hidden="chromeCollapsed" :watchlisted="watchlisted"
+            :volume-hint="volumeHint"
             @toggle="player.toggle()" @like="onLike(item)"
             @toggle-chrome="toggleImageChrome"
             @comment="sheetOpen = true" @favorite="onFavorite(item)"

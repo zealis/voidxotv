@@ -254,13 +254,21 @@ function go(index: number) {
   root.scrollTo({ top: target * root.clientHeight, behavior: reduced ? 'auto' : 'smooth' })
 }
 
+// 键盘改音量时递增，通知当前激活的卡片把音量指示条临时唤出。
+// 沉浸流同时渲染 3 条内容，只有 active 的那条会响应。
+const volumeHint = ref(0)
+
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, [contenteditable="true"]')) return
   if (sheetOpen.value) return
   // 方向键统一交给播放器：左右 ±5 秒、上下 ±5% 音量。
   // 沉浸流切视频仍可用滚轮 / 触摸滑动，不再占用上下键。
-  if (handlePlayerArrowKeys(event, player)) return
+  const action = handlePlayerArrowKeys(event, player)
+  if (action) {
+    if (action === 'volume') volumeHint.value++
+    return
+  }
   switch (event.key) {
     case ' ': event.preventDefault(); void player.toggle(); break
     case 'm': case 'M': player.setMuted(!player.state.muted); break
@@ -393,6 +401,7 @@ onBeforeUnmount(() => {
           :caption="caption(item.description)" :tags="tags(item.description)"
           :expanded="expanded" :watchlisted="watchlisted"
           :autoplay="barAutoplay" :clear-ui="barClear" :nav-hidden="chromeCollapsed"
+          :volume-hint="volumeHint"
           @toggle="player.toggle()" @like="onLike(item)"
           @toggle-chrome="toggleImageChrome"
           @comment="sheetOpen = true" @favorite="onFavorite(item)"

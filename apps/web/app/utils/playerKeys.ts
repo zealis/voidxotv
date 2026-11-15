@@ -15,25 +15,33 @@ type PlayerKeysTarget = {
   setVolume: (value: number) => void
 }
 
-/** 处理方向键，返回 true 表示已消费（调用方应停止后续快捷键判断）。 */
-export function handlePlayerArrowKeys(event: KeyboardEvent, player: PlayerKeysTarget): boolean {
+/** 本次按键动作：null 表示未消费，调用方应继续其它快捷键判断。 */
+export type PlayerKeyAction = 'seek' | 'volume' | null
+
+/**
+ * 处理方向键并回报动作。区分 seek / volume 是为了让页面在键盘改音量时通知控制条
+ * 把音量指示条唤出来——只改 player.state.volume 组件是看不见的。
+ */
+export function handlePlayerArrowKeys(event: KeyboardEvent, player: PlayerKeysTarget): PlayerKeyAction {
   const key = event.key
   if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'ArrowUp' && key !== 'ArrowDown') {
-    return false
+    return null
   }
   const { currentTime, duration, volume } = player.state
-  if (!duration) return false
+  if (!duration) return null
 
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
     const delta = key === 'ArrowRight' ? SEEK_STEP_SECONDS : -SEEK_STEP_SECONDS
     // seekRatio 内部会 clamp 到 0..1，这里不必自己夹一遍。
     player.seekRatio((currentTime + delta) / duration)
-  } else {
-    const delta = key === 'ArrowUp' ? VOLUME_STEP : -VOLUME_STEP
-    // 四舍五入到百分比整数，避免 0.05 累加出 0.15000000000000002 这类浮点尾数。
-    const next = Math.min(1, Math.max(0, Math.round((volume + delta) * 100) / 100))
-    player.setVolume(next)
+    event.preventDefault()
+    return 'seek'
   }
+
+  const delta = key === 'ArrowUp' ? VOLUME_STEP : -VOLUME_STEP
+  // 四舍五入到百分比整数，避免 0.05 累加出 0.15000000000000002 这类浮点尾数。
+  const next = Math.min(1, Math.max(0, Math.round((volume + delta) * 100) / 100))
+  player.setVolume(next)
   event.preventDefault()
-  return true
+  return 'volume'
 }

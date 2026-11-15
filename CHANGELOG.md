@@ -39,6 +39,27 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.27.1] - 2026-11-15
+
+### 修复
+
+- **播放控制条 / 音量指示条（键盘调音量）**：按 ↑/↓ 时音量确实变了，但音量指示条
+  始终不弹出来，看不到当前音量。根因：方向键在页面层只调用 `player.setVolume()`，
+  指示条却由 `ImmersiveItem.vue` 内部的 `openPop` 控制，组件收不到「音量变了」的信号；
+  旧的 m77 回归每次调音量前都先 hover 出浮层，也没覆盖到这个场景。改法：
+  `utils/playerKeys.ts` 的 `handlePlayerArrowKeys` 回报 `'seek' | 'volume' | null`；
+  `pages/index.vue` 与 `ImmersiveDetail.vue` 在音量键时递增 `volumeHint` 并传给控制条；
+  `ImmersiveItem.vue` watch 该信号，只有 `active` 卡片唤出指示条（首页同时渲染 3 条，
+  不会一起弹），连按重置计时、静手 1.5s 自动收起；鼠标进入音量按钮 / 指示条即接管，
+  交回原有 300ms hover 宽容期，切内容 / Esc / 点静音 / 卸载都清理定时器。
+  音量锚点加 `.pb-anchor-volume` 供 `:hover` 判定；左右键仍只定位、输入框聚焦不弹。
+
+### 改进
+
+- `.tools/headless-test/m78-volume-hint.js`：新增 13 项回归，刻意不 hover 音量按钮，
+  验证直接按 ↓ 指示条自动弹出并显示 95、连按重置计时、超时收起、hover 接管不误关、
+  首页只弹 1 个、左右键与输入框聚焦不误弹（`.tools` 不入库）。
+
 ## [0.27.0] - 2026-11-15
 
 ### 新增
