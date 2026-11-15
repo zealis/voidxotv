@@ -39,6 +39,32 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.31.2] - 2026-11-15
+
+### 安全维护
+
+- **访客 IP 默认只读服务器看到的原始地址**：统一到
+  `internal/platform/httpx.ClientIP`。默认完全不采信 `X-Forwarded-For` /
+  `X-Real-IP`，只读 TCP 对端（`RemoteAddr`），客户端无法通过伪造请求头改变
+  限流桶与审计记录。只有直连对端落在 `YJ_TRUSTED_PROXIES` 网段内（即请求确实
+  来自自己的反向代理）时，才解析 `X-Forwarded-For` 并取**最右一跳非受信地址**
+  —— 代理把真实客户端追加在右侧，左侧可能是客户端伪造的内容，所以绝不取最左。
+  `X-Real-IP` 永不读取。
+- **修复环境变量名不一致**：代码原本读 `TRUSTED_PROXIES`，而 `.env.example`
+  与部署文档写的是 `YJ_TRUSTED_PROXIES`，按文档配置不生效。现以
+  `YJ_TRUSTED_PROXIES` 为准并兼容旧名；默认值从 `127.0.0.1/32` 改为**空**，
+  不显式配置就绝不读代理头。生产反代需要填代理网段，并在反代用
+  `$proxy_add_x_forwarded_for` 追加真实地址。
+- **修复 IPv6 取 IP 错误**：前台原本用 `strings.Split(RemoteAddr, ":")[0]`，
+  `[2001:db8::1]:443` 会被截成空串，导致 IPv6 访客共用同一个限流桶。三处
+  （前台登录 / 后台登录与审计 / 匿名播放去重）统一改用 `httpx.ClientIP`，
+  正确处理端口、IPv6 与 zone，并把 IPv4-mapped IPv6 归一成 IPv4。
+- 验证：`httpx` 单测 5 组（默认忽略代理头、IPv6 与 zone、受信代理取最右一跳、
+  非受信对端忽略头、空 RemoteAddr）；`config` 单测覆盖默认空与
+  `YJ_TRUSTED_PROXIES` 解析；端到端带
+  `X-Forwarded-For: 8.8.8.8, 203.0.113.9` 登录失败，限流键仍落在 `127.0.0.1`，
+  伪造成 8.8.8.8 / 203.0.113.9 均未生效。
+
 ## [0.31.1] - 2026-11-15
 
 ### 安全维护

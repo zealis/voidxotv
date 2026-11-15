@@ -81,7 +81,11 @@ curl -fsS http://127.0.0.1:18080/health/live
 ```
 
 - 迁移**可重复执行**（golang-migrate，CI 会连跑两遍验证），升级 = 换镜像后再跑一次 migrate。
-- 反向代理：80/443 → `web:3000`（页面）与 `api:18080`（`/api/**`）；`YJ_TRUSTED_PROXIES` 填代理网段后才会信任 `X-Forwarded-For`（§11.6）。
+- 反向代理：80/443 → `web:3000`（页面）与 `api:18080`（`/api/**`）。访客 IP 默认
+  只读 TCP 对端（不信任任何代理头）；部署在反代后面时，`YJ_TRUSTED_PROXIES` 填
+  代理网段（如 `127.0.0.1/32` 或内网段），API 才会采信 `X-Forwarded-For` 的
+  **最右一跳非受信地址**。反代务必用 `$proxy_add_x_forwarded_for` 追加、不要直接
+  透传客户端发来的头；`X-Real-IP` 不参与判断（§11.6）。
 
 ## 5. 运维要点
 

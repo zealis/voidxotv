@@ -156,7 +156,10 @@ func Load() (Config, error) {
 		SMTPPassword: env("YJ_SMTP_PASSWORD", ""),
 		SMTPFrom:     env("YJ_SMTP_FROM", ""),
 	}
-	for _, raw := range splitCSV(env("TRUSTED_PROXIES", "127.0.0.1/32")) {
+	// 默认空：访客 IP 只读 TCP 对端地址，任何代理头都不采信。
+	// 部署在反向代理后面时，把代理网段填进 YJ_TRUSTED_PROXIES（兼容旧名
+	// TRUSTED_PROXIES），才会解析 X-Forwarded-For 的最右一跳。
+	for _, raw := range splitCSV(env("YJ_TRUSTED_PROXIES", env("TRUSTED_PROXIES", ""))) {
 		prefix, err := netip.ParsePrefix(raw)
 		if err != nil {
 			addr, addrErr := netip.ParseAddr(raw)

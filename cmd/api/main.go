@@ -35,6 +35,7 @@ import (
 	"github.com/yejie/voidxotv/internal/platform/cache"
 	"github.com/yejie/voidxotv/internal/platform/config"
 	"github.com/yejie/voidxotv/internal/platform/database"
+	"github.com/yejie/voidxotv/internal/platform/httpx"
 	"github.com/yejie/voidxotv/internal/platform/objectstore"
 	"github.com/yejie/voidxotv/internal/platform/queue"
 )
@@ -52,6 +53,10 @@ func run() error {
 		return err
 	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}))
+
+	// 访客 IP 只认 TCP 对端；只有直连来自受信代理网段时才采信 X-Forwarded-For
+	// 的最右一跳。生产反代必须配好这个列表，否则所有访客都会变成代理地址。
+	httpx.SetTrustedProxies(cfg.TrustedProxies)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

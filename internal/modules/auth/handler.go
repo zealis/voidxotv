@@ -6,12 +6,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/yejie/voidxotv/internal/platform/avatar"
 	"github.com/yejie/voidxotv/internal/platform/config"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
+	"github.com/yejie/voidxotv/internal/platform/httpx"
 )
 
 const (
@@ -263,7 +263,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	httpserver.Error(w, status, code, message, httpserver.RequestIDFromContext(r.Context()))
 }
 
-// clientIP uses the peer address only; X-Forwarded-For is ignored unless a trusted proxy is configured (§11.6).
+// clientIP 交给统一的 httpx.ClientIP：默认只认 TCP 对端，只有直连来自受信
+// 代理网段时才采信 X-Forwarded-For 的最右一跳（§11.6）。
 func clientIP(r *http.Request) string {
-	return strings.Split(r.RemoteAddr, ":")[0]
+	return httpx.ClientIP(r)
 }

@@ -16,7 +16,25 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Env != "dev" || cfg.RedisAddr != "127.0.0.1:6379" {
 		t.Fatalf("unexpected defaults: env=%q redis=%q", cfg.Env, cfg.RedisAddr)
 	}
-	if len(cfg.TrustedProxies) != 1 || cfg.TrustedProxies[0].String() != "127.0.0.1/32" {
+	// 默认不信任任何代理头：只读 TCP 对端，避免 X-Forwarded-For 被伪造。
+	if len(cfg.TrustedProxies) != 0 {
+		t.Fatalf("trusted proxies should default to empty, got %v", cfg.TrustedProxies)
+	}
+}
+
+func TestTrustedProxiesFromEnv(t *testing.T) {
+	t.Setenv("YJ_ENV", "")
+	t.Setenv("YJ_DATABASE_URL", "postgres://yejie:secret@127.0.0.1:5432/yejie?sslmode=disable")
+	t.Setenv("YJ_TRUSTED_PROXIES", "10.0.0.0/8, 192.168.1.5")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.TrustedProxies) != 2 {
+		t.Fatalf("trusted proxies = %v, want 2 entries", cfg.TrustedProxies)
+	}
+	if cfg.TrustedProxies[0].String() != "10.0.0.0/8" ||
+		cfg.TrustedProxies[1].String() != "192.168.1.5/32" {
 		t.Fatalf("trusted proxies = %v", cfg.TrustedProxies)
 	}
 }

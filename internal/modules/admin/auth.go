@@ -15,13 +15,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 	"github.com/yejie/voidxotv/internal/modules/auth"
 	"github.com/yejie/voidxotv/internal/platform/config"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
+	"github.com/yejie/voidxotv/internal/platform/httpx"
 )
 
 const (
@@ -423,13 +423,10 @@ func (h *Handler) wrapSelf(fn func(http.ResponseWriter, *http.Request)) http.Han
 	}))
 }
 
-// clientIP never trusts client-supplied proxy headers (§11.6).
+// clientIP 与前台统一：默认只认 TCP 对端，受信代理才采信 X-Forwarded-For
+// 的最右一跳，客户端自填的代理头一律不认（§11.6）。
 func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return strings.TrimSpace(r.RemoteAddr)
-	}
-	return host
+	return httpx.ClientIP(r)
 }
 
 // audit writes a read-only record for every privileged write (§11.6).

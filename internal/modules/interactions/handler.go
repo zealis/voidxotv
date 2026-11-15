@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -27,6 +26,7 @@ import (
 	"github.com/yejie/voidxotv/internal/modules/spam"
 	"github.com/yejie/voidxotv/internal/modules/stats"
 	"github.com/yejie/voidxotv/internal/platform/httpserver"
+	"github.com/yejie/voidxotv/internal/platform/httpx"
 	"github.com/yejie/voidxotv/internal/platform/nightid"
 	"github.com/yejie/voidxotv/internal/platform/objectstore"
 )
@@ -145,10 +145,8 @@ func (h *Handler) recordPlay(w http.ResponseWriter, r *http.Request) {
 }
 
 func anonymousViewerKey(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
+	// 与限流 / 审计同一口径：只认 TCP 对端，受信代理时才取 XFF 最右一跳。
+	host := httpx.ClientIP(r)
 	sum := sha256.Sum256([]byte(host + "|" + r.UserAgent()))
 	return "a:" + hex.EncodeToString(sum[:8])
 }
