@@ -8,6 +8,8 @@ const props = defineProps<{
   open: boolean
   contentId: number
   contentTitle: string
+  /** 举报对象：默认作品；评论区传 comment，object_id 即评论 id。 */
+  objectType?: 'content' | 'comment'
 }>()
 const emit = defineEmits<{ close: []; reported: [] }>()
 
@@ -54,7 +56,7 @@ async function submit() {
     await api('/api/v1/reports', {
       method: 'POST',
       body: {
-        object_type: 'content',
+        object_type: props.objectType || 'content',
         object_id: props.contentId,
         reason: reason.value,
         detail: detail.value.trim() || undefined,
@@ -75,9 +77,13 @@ async function submit() {
 </script>
 
 <template>
-  <VpDialog :open="props.open" title="举报作品" :busy="busy" @close="emit('close')">
+  <VpDialog
+    :open="props.open" :title="props.objectType === 'comment' ? '举报评论' : '举报作品'"
+    :busy="busy" @close="emit('close')"
+  >
     <p class="dialog-text">
-      举报「{{ props.contentTitle || '该作品' }}」：同一条内容 24 小时内的举报会合并处理，
+      举报「{{ props.contentTitle || (props.objectType === 'comment' ? '该评论' : '该作品') }}」：
+      {{ props.objectType === 'comment' ? '同一条评论' : '同一条内容' }} 24 小时内的举报会合并处理，
       处置结果将在「我 → 我的举报」反馈。
     </p>
     <p v-if="needLogin" class="dialog-text">

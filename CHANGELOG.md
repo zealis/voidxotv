@@ -39,6 +39,32 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.28.0] - 2026-11-15
+
+### 新增
+
+- **评论区点赞与更多操作**：主评论与楼中楼回复的「回复」后增加点赞与三点更多图标。
+  - 点赞图标复用视频点赞的 `ImIcon heart`（14px，已赞染品牌粉），旁边显示点赞数；
+    点击走服务端 toggle，乐观更新、失败回滚、未登录唤起登录弹窗。
+  - `migrations/000022_comment_likes`：新增 `comment_likes` 表（comment_id + user_id
+    主键去重）与用户维度索引。
+  - `internal/modules/interactions/handler.go`：新增
+    `POST /api/v1/comments/{commentID}/like`（登录 + CSRF，返回 `liked` / `like_count`）；
+    `GET /api/v1/contents/{id}/comments` 与 `/comments/{commentID}/replies` 补
+    `like_count` / `liked`（按当前访客即时计算，匿名恒 false），不进公共缓存口径。
+  - 更多图标用指定的 24 格三点 SVG，点开「举报」菜单（带旗帜图标），复用
+    `ReportDialog`；`ReportDialog` 新增 `objectType`，评论举报提交
+    `object_type: 'comment'`（后端 CHECK 本就允许），标题与说明随类型切换。
+    meta 行原有的删除文字按钮保持不变。菜单锚在按钮自己的 `.more-wrap` 上，
+    不锚整条 meta，否则会被推到评论行最右端、离三点很远。
+
+### 改进
+
+- `.tools/headless-test/m81-comment-like.js`：18 项全过（图标顺序与同尺寸、举报弹窗、
+  未登录引导与状态回滚、临时账号登录后点赞 0→1、刷新后仍已赞、再点取消回 0）；
+  跑完清理临时账号并核对基线 users 19 / contents 15 / storage_objects 8 /
+  comment_likes 0。
+
 ## [0.27.3] - 2026-11-15
 
 ### 修复

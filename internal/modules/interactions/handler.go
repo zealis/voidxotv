@@ -60,6 +60,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/contents/{id}/comments", h.guarded(h.addComment))
 	// 楼中楼：顶层评论线程内的回复（§6.5 回复上下文）。
 	mux.HandleFunc("GET /api/v1/contents/{id}/comments/{commentID}/replies", h.listReplies)
+	// 评论点赞：登录 + CSRF，与内容 reactions 分开计数。
+	mux.Handle("POST /api/v1/comments/{commentID}/like", h.guarded(h.toggleCommentLike))
 	// 评论管理（§11.1）：作者查看自己作品下的评论并删除。
 	mux.Handle("GET /api/v1/me/comments", h.auth.RequireAuth(http.HandlerFunc(h.myComments)))
 	mux.Handle("DELETE /api/v1/contents/{id}/comments/{commentID}",
@@ -260,6 +262,9 @@ type Comment struct {
 	ReplyCount int64 `json:"reply_count"`
 	// VerifiedCreator 表示作者是已认证创作者（users.role = 'creator'），前端据此在昵称旁挂标签。
 	VerifiedCreator bool `json:"verified_creator"`
+	// LikeCount / Liked 是评论点赞数与当前访客是否已赞（匿名恒 false）。
+	LikeCount int64 `json:"like_count"`
+	Liked     bool  `json:"liked"`
 	// avatarKey 只在服务端流转：对外一律给可访问地址，不泄漏对象键。
 	avatarKey string
 }
@@ -275,7 +280,10 @@ type Reply struct {
 	CreatedAt       time.Time `json:"created_at"`
 	UserID          int64     `json:"user_id"`
 	// ReplyTo 是「回复 @某人」的目标作者昵称（回复线程内其他回复时才有）。
-	ReplyTo   string `json:"reply_to,omitempty"`
+	ReplyTo string `json:"reply_to,omitempty"`
+	// LikeCount / Liked 同 Comment：楼中楼回复也能点赞。
+	LikeCount int64 `json:"like_count"`
+	Liked     bool  `json:"liked"`
 	avatarKey string
 }
 
@@ -295,18 +303,26 @@ func (h *Handler) listComments(w http.ResponseWriter, r *http.Request) {
 		cursor = 0
 	}
 
+	// 当前访客的点赞态按请求即时算，匿名传 0；不进公共缓存口径。
+	var viewerID int64
+	if principal, ok := h.auth.OptionalPrincipal(r); ok {
+		viewerID = principal.UserID
+	}
 	rows, err := h.db.Query(r.Context(), `
 		SELECT c.id, c.body, u.handle,
 		       COALESCE(NULLIF(btrim(u.display_name), ''), u.handle),
 		       COALESCE(u.avatar_key, ''),
 		       u.role = 'creator',
 		       c.created_at, c.user_id,
+		       (SELECT count(*) FROM comment_likes cl WHERE cl.comment_id = c.id),
+		       ($4 > 0 AND EXISTS (SELECT 1 FROM comment_likes cl
+		           WHERE cl.comment_id = c.id AND cl.user_id = $4)),
 		       (SELECT count(*) FROM comments rep
 		        WHERE rep.parent_id = c.id AND rep.status = 'visible')
 		FROM comments c JOIN users u ON u.id = c.user_id
 		WHERE c.content_id = $1 AND c.status = 'visible' AND c.parent_id IS NULL
 		  AND ($2 = 0 OR c.id < $2)
-		ORDER BY c.id DESC LIMIT $3`, id, cursor, limit+1)
+		ORDER BY c.id DESC LIMIT $3`, id, cursor, limit+1, viewerID)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -318,7 +334,7 @@ func (h *Handler) listComments(w http.ResponseWriter, r *http.Request) {
 		var item Comment
 		if err := rows.Scan(&item.ID, &item.Body, &item.Handle, &item.DisplayName,
 			&item.avatarKey, &item.VerifiedCreator, &item.CreatedAt, &item.UserID,
-			&item.ReplyCount); err != nil {
+			&item.LikeCount, &item.Liked, &item.ReplyCount); err != nil {
 			h.fail(w, r, err)
 			return
 		}
@@ -373,19 +389,26 @@ func (h *Handler) listReplies(w http.ResponseWriter, r *http.Request) {
 		cursor = 0
 	}
 
+	var viewerID int64
+	if principal, ok := h.auth.OptionalPrincipal(r); ok {
+		viewerID = principal.UserID
+	}
 	rows, err := h.db.Query(r.Context(), `
 		SELECT c.id, c.body, u.handle,
 		       COALESCE(NULLIF(btrim(u.display_name), ''), u.handle),
 		       COALESCE(u.avatar_key, ''),
 		       u.role = 'creator',
 		       c.created_at, c.user_id,
+		       (SELECT count(*) FROM comment_likes cl WHERE cl.comment_id = c.id),
+		       ($4 > 0 AND EXISTS (SELECT 1 FROM comment_likes cl
+		           WHERE cl.comment_id = c.id AND cl.user_id = $4)),
 		       COALESCE(NULLIF(btrim(rt.display_name), ''), rt.handle, '')
 		FROM comments c
 		JOIN users u ON u.id = c.user_id
 		LEFT JOIN users rt ON rt.id = c.reply_to_user_id
 		WHERE c.parent_id = $1 AND c.status = 'visible'
 		  AND ($2 = 0 OR c.id > $2)
-		ORDER BY c.id ASC LIMIT $3`, rootID, cursor, limit+1)
+		ORDER BY c.id ASC LIMIT $3`, rootID, cursor, limit+1, viewerID)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -397,7 +420,7 @@ func (h *Handler) listReplies(w http.ResponseWriter, r *http.Request) {
 		var item Reply
 		if err := rows.Scan(&item.ID, &item.Body, &item.Handle, &item.DisplayName,
 			&item.avatarKey, &item.VerifiedCreator, &item.CreatedAt, &item.UserID,
-			&item.ReplyTo); err != nil {
+			&item.LikeCount, &item.Liked, &item.ReplyTo); err != nil {
 			h.fail(w, r, err)
 			return
 		}
@@ -420,6 +443,54 @@ func (h *Handler) listReplies(w http.ResponseWriter, r *http.Request) {
 	}
 	httpserver.JSON(w, http.StatusOK, map[string]any{
 		"items": items, "next_cursor": next, "count": len(items),
+	})
+}
+
+// toggleCommentLike 切换当前用户对一条评论的点赞，返回最新状态与总数。
+// 与内容 reactions 分开：不改内容计数，也不派发互动通知。
+func (h *Handler) toggleCommentLike(w http.ResponseWriter, r *http.Request) {
+	commentID, err := strconv.ParseInt(r.PathValue("commentID"), 10, 64)
+	if err != nil || commentID <= 0 {
+		h.fail(w, r, admin.ErrInvalidInput)
+		return
+	}
+	principal, _ := auth.PrincipalFromContext(r.Context())
+	var visible bool
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT EXISTS (SELECT 1 FROM comments WHERE id = $1 AND status = 'visible')`,
+		commentID).Scan(&visible); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if !visible {
+		httpserver.Error(w, http.StatusNotFound, "not_found", "评论不存在",
+			httpserver.RequestIDFromContext(r.Context()))
+		return
+	}
+	tag, err := h.db.Exec(r.Context(),
+		`DELETE FROM comment_likes WHERE comment_id = $1 AND user_id = $2`,
+		commentID, principal.UserID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	liked := tag.RowsAffected() == 0
+	if liked {
+		if _, err := h.db.Exec(r.Context(),
+			`INSERT INTO comment_likes (comment_id, user_id) VALUES ($1, $2)
+			 ON CONFLICT DO NOTHING`, commentID, principal.UserID); err != nil {
+			h.fail(w, r, err)
+			return
+		}
+	}
+	var likeCount int64
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT count(*) FROM comment_likes WHERE comment_id = $1`, commentID).Scan(&likeCount); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpserver.JSON(w, http.StatusOK, map[string]any{
+		"liked": liked, "like_count": likeCount,
 	})
 }
 

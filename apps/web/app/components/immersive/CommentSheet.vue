@@ -16,6 +16,9 @@ interface CommentItem {
   created_at: string
   user_id: number
   reply_count: number
+  /** 点赞数与当前访客是否已赞（服务端按请求计算）。 */
+  like_count: number
+  liked?: boolean
   pending?: boolean
 }
 
@@ -29,6 +32,8 @@ interface ReplyItem {
   created_at: string
   user_id: number
   reply_to?: string
+  like_count: number
+  liked?: boolean
   pending?: boolean
 }
 
@@ -63,8 +68,57 @@ const threads = reactive<Record<number, Thread>>({})
 const input = ref<HTMLInputElement | null>(null)
 let confirmTimer: ReturnType<typeof setTimeout> | null = null
 
+// 评论点赞 / 更多菜单：点赞走服务端 toggle，先乐观更新再按返回值对齐。
+const { open: openAuthDialog } = useAuthDialog()
+const moreOpen = ref<number | null>(null)
+const reportTarget = ref<number | null>(null)
+const busyLikes = reactive(new Set<number>())
+
+function formatLike(value: number): string {
+  const n = value || 0
+  return n >= 10000 ? `${(n / 10000).toFixed(1).replace(/\.0$/, '')}万` : String(n)
+}
+
+function toggleMore(id: number) {
+  moreOpen.value = moreOpen.value === id ? null : id
+}
+
+function openCommentReport(id: number) {
+  moreOpen.value = null
+  reportTarget.value = id
+}
+
+async function toggleCommentLike(target: CommentItem | ReplyItem) {
+  if (target.pending || busyLikes.has(target.id)) return
+  const before = { liked: !!target.liked, count: target.like_count || 0 }
+  target.liked = !before.liked
+  target.like_count = Math.max(0, before.count + (target.liked ? 1 : -1))
+  busyLikes.add(target.id)
+  try {
+    const data = await api<{ liked: boolean; like_count: number }>(
+      `/api/v1/comments/${target.id}/like`, { method: 'POST', body: {} },
+    )
+    target.liked = data.liked
+    target.like_count = data.like_count
+  } catch (error) {
+    target.liked = before.liked
+    target.like_count = before.count
+    if (error instanceof ApiError && error.status === 401) {
+      openAuthDialog('login', { reason: '登录后即可给评论点赞' })
+      return
+    }
+    notice.value = '点赞失败，请稍后再试'
+  } finally {
+    busyLikes.delete(target.id)
+  }
+}
+
 watch(() => props.open, async (open) => {
-  if (!open) return
+  if (!open) {
+    moreOpen.value = null
+    reportTarget.value = null
+    return
+  }
   await nextTick()
   input.value?.focus()
   if (!items.value.length) load(true)
@@ -79,6 +133,8 @@ watch(() => props.contentId, () => {
   total.value = props.count
   Object.keys(threads).forEach((key) => delete threads[Number(key)])
   replyTo.value = null
+  moreOpen.value = null
+  reportTarget.value = null
   pendingGif.value = ''
   postFailed.value = false
   notice.value = ''
@@ -185,14 +241,15 @@ async function submit() {
     thread.open = true
     thread.items.push({
       id: -now, body, handle: '', display_name: '我',
-      created_at: new Date().toISOString(), user_id: me.value?.id ?? 0, pending: true,
+      created_at: new Date().toISOString(), user_id: me.value?.id ?? 0,
+      like_count: 0, liked: false, pending: true,
     })
     if (!thread.loaded) await loadReplies(parent.id).catch(() => {})
   } else {
     items.value = [{
       id: -now, body, handle: '', display_name: '我',
       created_at: new Date().toISOString(), user_id: me.value?.id ?? 0,
-      reply_count: 0, pending: true,
+      reply_count: 0, like_count: 0, liked: false, pending: true,
     }, ...items.value]
   }
   sentDraft.value = text
@@ -360,7 +417,7 @@ function isMine(item: { user_id: number; id: number }): boolean {
 </script>
 
 <template>
-  <div v-if="props.open" class="sheet-layer">
+  <div v-if="props.open" class="sheet-layer" @click="moreOpen = null">
     <button type="button" class="backdrop" aria-label="关闭评论" @click="emit('close')" />
     <section class="sheet" role="dialog" aria-modal="true" aria-label="评论">
       <div class="handle" aria-hidden="true" />
@@ -399,6 +456,33 @@ function isMine(item: { user_id: number; id: number }): boolean {
               <small>{{ when(comment.created_at) }}</small>
               <button type="button" class="action" @click="startReply(comment)">回复</button>
               <button
+                type="button" class="action like" :class="{ on: comment.liked }"
+                :aria-pressed="!!comment.liked"
+                :aria-label="comment.liked ? '取消点赞' : '点赞'"
+                @click="toggleCommentLike(comment)"
+              >
+                <ImIcon name="heart" :size="14" :filled="!!comment.liked" />
+                <span class="like-count">{{ formatLike(comment.like_count) }}</span>
+              </button>
+              <span class="more-wrap">
+                <button
+                  type="button" class="action icon-more" :aria-expanded="moreOpen === comment.id"
+                  aria-label="更多" title="更多" @click.stop="toggleMore(comment.id)"
+                >
+                  <svg class="dots" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path
+                      fill="currentColor"
+                      d="M14 12a2 2 0 1 1-4 0a2 2 0 0 1 4 0m-7 0a2 2 0 1 1-4 0a2 2 0 0 1 4 0m14 0a2 2 0 1 1-4 0a2 2 0 0 1 4 0"
+                    />
+                  </svg>
+                </button>
+                <div v-if="moreOpen === comment.id" class="more-menu" role="menu" @click.stop>
+                  <button type="button" role="menuitem" @click="openCommentReport(comment.id)">
+                    <ImIcon name="flag" :size="14" /><span>举报</span>
+                  </button>
+                </div>
+              </span>
+              <button
                 v-if="isMine(comment)" type="button" class="action danger"
                 @click="requestRemove(comment)"
               >{{ confirmDelete === comment.id ? '确认删除' : '删除' }}</button>
@@ -436,6 +520,33 @@ function isMine(item: { user_id: number; id: number }): boolean {
                     <div class="meta">
                       <small>{{ when(reply.created_at) }}</small>
                       <button type="button" class="action" @click="startReply(reply)">回复</button>
+                      <button
+                        type="button" class="action like" :class="{ on: reply.liked }"
+                        :aria-pressed="!!reply.liked"
+                        :aria-label="reply.liked ? '取消点赞' : '点赞'"
+                        @click="toggleCommentLike(reply)"
+                      >
+                        <ImIcon name="heart" :size="14" :filled="!!reply.liked" />
+                        <span class="like-count">{{ formatLike(reply.like_count) }}</span>
+                      </button>
+                      <span class="more-wrap">
+                        <button
+                          type="button" class="action icon-more" :aria-expanded="moreOpen === reply.id"
+                          aria-label="更多" title="更多" @click.stop="toggleMore(reply.id)"
+                        >
+                          <svg class="dots" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path
+                              fill="currentColor"
+                              d="M14 12a2 2 0 1 1-4 0a2 2 0 0 1 4 0m-7 0a2 2 0 1 1-4 0a2 2 0 0 1 4 0m14 0a2 2 0 1 1-4 0a2 2 0 0 1 4 0"
+                            />
+                          </svg>
+                        </button>
+                        <div v-if="moreOpen === reply.id" class="more-menu" role="menu" @click.stop>
+                          <button type="button" role="menuitem" @click="openCommentReport(reply.id)">
+                            <ImIcon name="flag" :size="14" /><span>举报</span>
+                          </button>
+                        </div>
+                      </span>
                       <button
                         v-if="isMine(reply)" type="button" class="action danger"
                         @click="requestRemove(reply)"
@@ -496,6 +607,11 @@ function isMine(item: { user_id: number; id: number }): boolean {
         <p v-if="postFailed" class="failed-hint" role="status">发送失败，草稿已保留，可重试。</p>
       </form>
     </section>
+    <ReportDialog
+      :open="reportTarget !== null" :content-id="reportTarget ?? 0"
+      content-title="这条评论" object-type="comment"
+      @close="reportTarget = null" @reported="notice = '举报已提交'"
+    />
   </div>
 </template>
 
@@ -597,6 +713,29 @@ function isMine(item: { user_id: number; id: number }): boolean {
   cursor: pointer;
 }
 .action.danger { color: #ff6b5e; }
+/* 点赞：心形复用视频点赞的 ImIcon，已赞染品牌粉；数字与「回复」同字号。 */
+.action.like { display: inline-flex; align-items: center; gap: 4px; line-height: 1; }
+.action.like.on { color: var(--vp-im-accent); }
+.like-count { font-size: 11px; font-variant-numeric: tabular-nums; }
+/* 更多：三点字形与心形同为 14px。菜单锚在按钮自己的 more-wrap 上，
+   不能锚整条 meta——那会把菜单推到评论行最右端，离三点很远。 */
+.more-wrap { position: relative; display: inline-flex; }
+.icon-more { display: grid; place-items: center; padding: 2px; }
+.icon-more .dots { display: block; width: 14px; height: 14px; }
+.more-menu {
+  position: absolute; left: 0; top: calc(100% + 4px); z-index: 5;
+  min-width: 88px; padding: 4px;
+  border: 1px solid var(--vp-im-border); border-radius: 8px;
+  background: var(--vp-im-surface-raised);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.more-menu button {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 6px 10px;
+  border: 0; border-radius: 6px; background: none;
+  color: var(--vp-im-text-primary); font-size: 12px; text-align: left; cursor: pointer;
+}
+.more-menu button:hover { background: rgba(255, 255, 255, 0.08); }
 .thread { margin-top: 2px; }
 .expand {
   border: 0;
