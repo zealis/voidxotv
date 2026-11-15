@@ -39,6 +39,35 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.29.0] - 2026-11-15
+
+### 新增
+
+- **后台评论举报展示与处置**：补上 0.28.0 接入评论举报后遗漏的管理端链路。
+  - `internal/modules/admin/repository.go`：`ReportCase` 增加 `object_path`；
+    `ListReportCases` 按对象类型取标题——作品取 `contents.title`、评论取正文摘要
+    （`[[gif:…]]` 换成「[动图]」，不把内部标记展示到界面）、用户取昵称或邮箱；
+    评论举报返回所属作品的 `/video|image/<slug>` 深链接，作品举报同样给链接，
+    不再一律显示「（对象已删除）」。
+  - `ResolveReportCase`：`upheld + comment + remove_comment` 时把评论软删除
+    （`status='removed'`，与前台删除评论同一口径）；`admin/handler.go` 补
+    `comment.remove` 审计留痕。评论举报判成立不再只是记录 `linked_action`。
+  - `internal/modules/interactions/reports.go`：前台「我的举报」同样补评论标题，
+    不再因为只 JOIN `contents` 而显示空标题。
+  - `apps/web/app/components/admin/AdminReports.vue`：对象列改中文类型标签
+    （作品 / 评论 / 用户）、评论摘要加「评论：」前缀、标题可点击跳转到作品；
+    处置弹窗按对象类型给联动选项，评论专属「不联动评论 / 移除这条评论」。
+    `useAdminApi.ts` 的 `AdminReportCase` 同步 `object_path`。
+
+### 改进
+
+- `.tools/headless-test/m83-admin-comment-report.js`：12 项全过（列表返回评论摘要
+  与作品路径、作品举报单不受影响、处置接口 200、评论真的变 `removed`）。
+  `.tools/headless-test/m84-admin-report-ui.js`：9 项全过（中文标签、摘要、跳转
+  链接、处置弹窗专属联动且不含内容动作）。临时举报单、通知、审计与评论状态
+  跑完按基线还原（cases 5 / reports 3 / user_notifications 14 /
+  admin_audit_logs 76 / visible_comments 14 / comment 91 为 visible）。
+
 ## [0.28.1] - 2026-11-15
 
 ### 改进

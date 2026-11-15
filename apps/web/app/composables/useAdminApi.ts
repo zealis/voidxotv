@@ -66,6 +66,8 @@ export interface AdminReportCase {
   object_type: string
   object_id: number
   object_title: string
+  /** 可跳转的作品深链接；评论举报指向所属作品，用户举报为空。 */
+  object_path: string
   status: string
   report_count: number
   top_reason: string

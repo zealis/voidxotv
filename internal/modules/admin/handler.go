@@ -399,6 +399,12 @@ func (h *Handler) resolveReport(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// 评论举报成立且联动移除评论时单独留痕，便于追查是谁移除了哪条评论。
+	if request.Outcome == "upheld" && result.ObjectType == "comment" &&
+		request.LinkedAction == "remove_comment" {
+		h.audit(r, "comment.remove", "comment", result.ObjectID,
+			nil, map[string]any{"source": "report", "case_id": caseID})
+	}
 	httpserver.JSON(w, http.StatusOK, result)
 }
 

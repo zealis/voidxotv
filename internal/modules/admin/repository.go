@@ -371,10 +371,12 @@ func (r *Repository) BatchApprove(ctx context.Context, ids []int64, adminID int6
 // ── 举报（§9.5）───────────────────────────────────────────────────
 
 type ReportCase struct {
-	ID           int64      `json:"id"`
-	ObjectType   string     `json:"object_type"`
-	ObjectID     int64      `json:"object_id"`
-	ObjectTitle  string     `json:"object_title"`
+	ID          int64  `json:"id"`
+	ObjectType  string `json:"object_type"`
+	ObjectID    int64  `json:"object_id"`
+	ObjectTitle string `json:"object_title"`
+	// ObjectPath 是可跳转的作品深链接（评论举报给所属作品，用户举报为空）。
+	ObjectPath   string     `json:"object_path"`
 	Status       string     `json:"status"`
 	ReportCount  int        `json:"report_count"`
 	TopReason    string     `json:"top_reason"`
@@ -387,8 +389,27 @@ type ReportCase struct {
 func (r *Repository) ListReportCases(ctx context.Context, limit int) ([]ReportCase, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT rc.id, rc.object_type, rc.object_id,
-		       COALESCE((SELECT title FROM contents WHERE id = rc.object_id
-		                 AND rc.object_type = 'content'), '(对象已删除)'),
+		       CASE
+		         WHEN rc.object_type = 'content' THEN COALESCE(
+		           (SELECT title FROM contents WHERE id = rc.object_id), '(作品已删除)')
+		         WHEN rc.object_type = 'comment' THEN COALESCE(
+		           (SELECT left(regexp_replace(btrim(cm.body),
+		             '\[\[gif:[^\]]*\]\]', '[动图]', 'g'), 60) FROM comments cm
+		            WHERE cm.id = rc.object_id), '(评论已删除)')
+		         WHEN rc.object_type = 'user' THEN COALESCE(
+		           (SELECT COALESCE(NULLIF(btrim(u.display_name), ''), u.email)
+		            FROM users u WHERE u.id = rc.object_id), '(用户已删除)')
+		         ELSE '(对象已删除)'
+		       END,
+		       COALESCE((
+		         SELECT CASE WHEN c.type = 'image' THEN '/image/' ELSE '/video/' END || c.slug
+		         FROM contents c
+		         WHERE c.id = CASE
+		           WHEN rc.object_type = 'content' THEN rc.object_id
+		           WHEN rc.object_type = 'comment' THEN
+		             (SELECT cm.content_id FROM comments cm WHERE cm.id = rc.object_id)
+		           ELSE NULL END
+		       ), ''),
 		       rc.status, rc.report_count,
 		       COALESCE((SELECT reason FROM reports WHERE case_id = rc.id
 		                 ORDER BY created_at ASC LIMIT 1), 'other'),
@@ -404,7 +425,7 @@ func (r *Repository) ListReportCases(ctx context.Context, limit int) ([]ReportCa
 	for rows.Next() {
 		var item ReportCase
 		if err := rows.Scan(&item.ID, &item.ObjectType, &item.ObjectID, &item.ObjectTitle,
-			&item.Status, &item.ReportCount, &item.TopReason, &item.Resolution,
+			&item.ObjectPath, &item.Status, &item.ReportCount, &item.TopReason, &item.Resolution,
 			&item.LinkedAction, &item.OpenedAt, &item.ResolvedAt); err != nil {
 			return nil, err
 		}
@@ -469,6 +490,14 @@ func (r *Repository) ResolveReportCase(ctx context.Context, caseID, adminID int6
 			if _, err := applyDecisionTx(ctx, tx, objectID, adminID, "limit", ""); err != nil {
 				return ReportCase{}, err
 			}
+		}
+	}
+	// 评论举报成立：按联动选项软删除评论，口径与前台删除评论一致。
+	if outcome == "upheld" && objectType == "comment" && linkedAction == "remove_comment" {
+		if _, err := tx.Exec(ctx, `
+			UPDATE comments SET status = 'removed' WHERE id = $1 AND status <> 'removed'`,
+			objectID); err != nil {
+			return ReportCase{}, err
 		}
 	}
 	// 向举报人反馈结果（§9.5）。逐个举报人走 Dispatch，

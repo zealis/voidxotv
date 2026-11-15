@@ -93,9 +93,29 @@ const userActions = [
   { value: 'mute', label: '禁言用户' },
   { value: 'ban', label: '封禁用户' },
 ]
-const linkedOptions = computed(() => (
-  dialog.item?.object_type === 'user' ? userActions : contentActions
-))
+const commentActions = [
+  { value: 'none', label: '不联动评论' },
+  { value: 'remove_comment', label: '移除这条评论' },
+]
+const typeLabels: Record<string, string> = {
+  content: '作品', comment: '评论', user: '用户',
+}
+const linkedOptions = computed(() => {
+  const type = dialog.item?.object_type
+  if (type === 'user') return userActions
+  if (type === 'comment') return commentActions
+  return contentActions
+})
+
+// 表格插槽给的是 element-plus 的 DefaultRow，按字段传而不是整行对象，
+// 避免把弱类型行直接断言成 AdminReportCase。
+function objectLabel(type: string, title: string): string {
+  const text = title || '（对象已删除）'
+  return type === 'comment' ? `评论：${text}` : text
+}
+function typeLabel(type: string): string {
+  return typeLabels[type] || '对象'
+}
 </script>
 
 <template>
@@ -113,8 +133,14 @@ const linkedOptions = computed(() => (
     <ElTable v-else v-loading="loading" :data="items" size="default" class="report-table">
       <ElTableColumn label="对象" min-width="200">
         <template #default="scope">
-          <div class="obj">{{ scope.row.object_title || '（对象已删除）' }}</div>
-          <div class="sub">{{ scope.row.object_type }} #{{ scope.row.object_id }}</div>
+          <div class="obj">
+            <a
+              v-if="scope.row.object_path" :href="scope.row.object_path"
+              target="_blank" rel="noopener noreferrer"
+            >{{ objectLabel(scope.row.object_type, scope.row.object_title) }}</a>
+            <span v-else>{{ objectLabel(scope.row.object_type, scope.row.object_title) }}</span>
+          </div>
+          <div class="sub">{{ typeLabel(scope.row.object_type) }} #{{ scope.row.object_id }}</div>
         </template>
       </ElTableColumn>
       <ElTableColumn label="举报次数" width="96">
@@ -155,7 +181,7 @@ const linkedOptions = computed(() => (
     <ElDialog v-model="dialog.open" title="处置举报单" width="480px">
       <div class="dialog-body">
         <p class="dialog-tip">
-          对象：{{ dialog.item?.object_title || '（已删除）' }} ·
+          对象：{{ dialog.item ? objectLabel(dialog.item.object_type, dialog.item.object_title) : '（已删除）' }} ·
           累计 {{ dialog.item?.report_count }} 次举报
         </p>
         <label>结论</label>
@@ -187,6 +213,12 @@ const linkedOptions = computed(() => (
 
 <style scoped>
 .reports { display: grid; gap: 14px; }
+.obj a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.obj a:hover { opacity: 0.8; }
 .toolbar { display: flex; align-items: flex-start; justify-content: flex-end; gap: 16px; }
 .state {
   display: grid; gap: 12px; place-items: start; padding: 24px; border-radius: 16px;

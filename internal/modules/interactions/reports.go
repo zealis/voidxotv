@@ -31,11 +31,17 @@ func (h *Handler) myReports(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `
 		SELECT r.id, r.object_type, r.object_id, r.reason, r.detail, r.status,
 		       r.created_at, r.resolved_at,
-		       COALESCE(c.title, ''),
+		       COALESCE(CASE
+		         WHEN r.object_type = 'content' THEN
+		           (SELECT title FROM contents WHERE id = r.object_id)
+		         WHEN r.object_type = 'comment' THEN
+		           (SELECT left(regexp_replace(btrim(cm.body),
+		             '\[\[gif:[^\]]*\]\]', '[动图]', 'g'), 60)
+		            FROM comments cm WHERE cm.id = r.object_id)
+		         ELSE NULL END, ''),
 		       COALESCE(rc.status, ''), COALESCE(rc.resolution, ''), rc.resolved_at
 		FROM reports r
 		LEFT JOIN report_cases rc ON rc.id = r.case_id
-		LEFT JOIN contents c ON r.object_type = 'content' AND c.id = r.object_id
 		WHERE r.reporter_id = $1
 		ORDER BY r.id DESC LIMIT 50`, principal.UserID)
 	if err != nil {
