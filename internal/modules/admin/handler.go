@@ -183,7 +183,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name: h.cookieName(), Value: token, Path: "/",
 		HttpOnly: true, Secure: h.cfg.CookieSecure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		Expires:  now.Add(h.cfg.SessionAbsoluteTTL),
 	})
 	httpserver.JSON(w, http.StatusOK, map[string]any{
@@ -198,7 +198,7 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 		_ = h.sessions.Destroy(r.Context(), cookie.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: h.cookieName(), Value: "", Path: "/",
-		HttpOnly: true, Secure: h.cfg.CookieSecure, SameSite: http.SameSiteLaxMode,
+		HttpOnly: true, Secure: h.cfg.CookieSecure, SameSite: http.SameSiteStrictMode,
 		MaxAge: -1, Expires: time.Unix(0, 0)})
 	httpserver.JSON(w, http.StatusOK, map[string]any{"logged_out": true})
 }

@@ -480,6 +480,23 @@ async function submit() {
   }
 }
 
+// 退出登录是降权操作：两步确认（点一次变「确认退出」，3 秒后还原），
+// 避免误点或被脚本顺手带走；不要求再输密码，否刚忘密码就退不出去。
+const confirmSignOut = ref(false)
+let signOutTimer: ReturnType<typeof setTimeout> | null = null
+
+function requestSignOut() {
+  if (confirmSignOut.value) {
+    confirmSignOut.value = false
+    if (signOutTimer) { clearTimeout(signOutTimer); signOutTimer = null }
+    void signOut()
+    return
+  }
+  confirmSignOut.value = true
+  if (signOutTimer) clearTimeout(signOutTimer)
+  signOutTimer = setTimeout(() => { confirmSignOut.value = false }, 3000)
+}
+
 async function signOut() {
   try { await logout() } catch { /* session may already be gone */ }
   clearCsrf()
@@ -510,7 +527,10 @@ async function signOut() {
             <strong>夜街号：{{ me.handle }}</strong>
             <NuxtLink to="/studio">创作中心</NuxtLink>
           </div>
-          <button type="button" class="sign-out" @click="signOut">退出</button>
+          <button
+            type="button" class="sign-out" :class="{ danger: confirmSignOut }"
+            @click="requestSignOut"
+          >{{ confirmSignOut ? '确认退出' : '退出' }}</button>
         </template>
         <button v-else-if="!checking" type="button" class="rail-login" @click="openAuthDialog()">登录 / 注册</button>
         <span v-else class="rail-user-text">正在检查登录…</span>
@@ -742,6 +762,7 @@ async function signOut() {
 .rail-user-text strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail-user-text a { font-size: 11px; color: var(--vp-tool-text-2); text-decoration: none; }
 .sign-out { flex: none; margin-left: auto; padding: 4px 7px; font-size: 10px; white-space: nowrap; border-radius: 6px; cursor: pointer; border: 1px solid var(--vp-tool-border-strong); background: transparent; color: var(--vp-tool-text-2); }
+.sign-out.danger { color: #ff6b5e; border-color: rgba(255, 107, 94, 0.5); }
 .rail-login { border: 0; background: none; padding: 0; cursor: pointer; font-family: inherit; color: var(--vp-tool-accent-ink); text-decoration: none; font-size: 12px; }
 
 /* 中栏 */

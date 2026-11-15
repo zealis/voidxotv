@@ -41,6 +41,14 @@ export default defineNitroPlugin((nitroApp) => {
     headers['x-content-type-options'] = 'nosniff'
     headers['referrer-policy'] = 'strict-origin-when-cross-origin'
     headers['permissions-policy'] = 'camera=(), microphone=(), geolocation=(), payment=()'
+    // 页面只允许同源读取：跨站即便拿到 URL 也读不到内容（防被第三方页面 fetch）。
+    headers['cross-origin-resource-policy'] = 'same-origin'
+    // 旧浏览器不认 CSP frame-ancestors，用 X-Frame-Options 兜底；开发期预览面板
+    // 通过 iframe 嵌入页面，因此只在业务环境 production 下禁止嵌套。
+    if (process.env.YJ_ENV === 'production') {
+      headers['x-frame-options'] = 'DENY'
+      headers['cross-origin-opener-policy'] = 'same-origin'
+    }
     if (process.env.NODE_ENV === 'production') {
       headers['strict-transport-security'] = 'max-age=31536000; includeSubDomains'
     }

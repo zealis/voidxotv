@@ -39,6 +39,34 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.31.1] - 2026-11-15
+
+### 安全维护
+
+- **登录 Cookie 收紧到 `SameSite=Strict`**：前台与后台的登录 / 退出共 4 处
+  Cookie 从 `Lax` 改为 `Strict`。确认其余属性不变：`HttpOnly`（JS 读不到）、
+  `Path=/`、无 `Domain`（host-only）；生产用 `__Host-` 前缀并强制 `Secure`
+  （启动校验会拒绝不带 Secure 的生产配置）。会话令牌只存服务端 Redis，
+  浏览器侧无法读取。
+- **认证响应不再被缓存**：`httpserver.JSON` 统一加 `Cache-Control: no-store`，
+  带 CSRF 令牌的登录 / 会话响应不会被浏览器或中间代理留下。
+- **页面安全响应头补齐**：新增 `Cross-Origin-Resource-Policy: same-origin`
+  （第三方页面不能跨站读取本站内容）；生产环境再加 `X-Frame-Options: DENY`
+  与 `Cross-Origin-Opener-Policy: same-origin`，作为 CSP `frame-ancestors`
+  的旧浏览器兜底。
+- **退出登录两步确认**：前台创作者工作台的「退出」点一次变成「确认退出」
+  （3 秒后自动还原），后台退出保留确认弹窗。退出不要求密码，避免忘记密码时
+  退不出去。
+- `.tools/headless-test/m91-cookie-security.js`：18 项全过（前台 / 后台 Cookie
+  的 HttpOnly / SameSite=Strict / Path=/ / 无 Domain、认证响应 no-store、
+  页面安全头、前台两步确认与 3 秒还原、后台确认弹窗）。
+
+### 改进
+
+- `SameSite=Strict` 的取舍：从外部链接首次打开时，文档请求不带 Cookie，SSR
+  可能先显示未登录，客户端 XHR 会立刻恢复；后台是 SPA，不受影响。若不能接受
+  这个首屏闪烁，可改回 `Lax`（跨站写请求同样不会带 Cookie）。
+
 ## [0.31.0] - 2026-11-15
 
 ### 新增

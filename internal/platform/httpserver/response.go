@@ -42,6 +42,8 @@ type ErrorBody struct {
 
 func JSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	// API 响应里可能有会话相关的 CSRF 令牌，任何一层缓存都不该留下它。
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if data == nil {
 		return
