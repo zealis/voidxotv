@@ -39,6 +39,41 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.31.3] - 2026-11-15
+
+### 安全维护
+
+- **隐藏文件与源码路径不再对外**：新增 Nuxt 中间件
+  `server/middleware/block-sensitive-paths.ts`——以点开头的路径（`.git` /
+  `.env` / `.workbuddy` / `.nuxt` 等）、`compose.yaml`、`go.mod` 与锁文件、
+  `migrations`、`deployments`、`scripts`、`bin`、`data`、`tests`、`设计文档`、
+  `参考资料` 一律返回 404（`/.well-known/` 放行，避免 ACME 续期失败）。
+  同时新增 `apps/web/public/robots.txt`，禁止抓取 `/admin`、`/api/`、`/studio`、
+  `/settings`、`/messages`、`/library`、`/me`。
+- **健康检查与指标只给本机**：`/health/live`、`/health/ready`、`/metrics`
+  统一包 `internalOnly`——只接受 loopback 直连且不带 `X-Forwarded-For` /
+  `X-Real-IP` / `Forwarded` 的请求，其余一律 404。容器健康检查
+  （`wget 127.0.0.1:18080/health/ready`）不受影响。
+- **部署侧收敛**：新增 `deployments/production/nginx.conf.example`（隐藏文件 /
+  源码 / 配置 deny、`/health` 与 `/metrics` 仅 `127.0.0.1`、`/admin` 可选 IP
+  白名单、拒绝 TRACE）；新增 `.dockerignore`，避免 `.git` / `.env` / `data`
+  被打进镜像；`deployments/DEPLOY.md` 补「暴露面收敛」：对外只开 80/443，
+  Postgres / Redis / S3 不加 `ports`。
+
+### 修复
+
+- **`/health/ready` 泄露依赖明细**：原本返回
+  `{"postgres":"ok","redis":"ok"}`，现在成功时只回 `{"status":"ok"}`，
+  失败仍是 503 `not_ready`，不区分哪个依赖挂了。
+
+### 改进
+
+- 验证：本机 `/health/live` 200（含版本）、`/health/ready` 200
+  `{"status":"ok"}`；三者带 `X-Forwarded-For` 时均 404。页面 `/.env`、
+  `/.git/config`、`/compose.yaml`、`/go.mod`、`/migrations/...`、
+  `/.workbuddy/...` 全部 404；`/robots.txt` 200 且禁止后台与接口；首页 200。
+  Go 单测新增「健康接口对 loopback 开放、对外部直连与反代转发返回 404」。
+
 ## [0.31.2] - 2026-11-15
 
 ### 安全维护

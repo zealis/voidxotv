@@ -76,7 +76,7 @@ docker run --rm --network yejie_default \
   -e YJ_DATABASE_URL='postgres://<user>:<pass>@postgres:5432/<db>?sslmode=disable' \
   <api-image> migrate   # 或宿主机: YJ_DATABASE_URL=... go run ./cmd/migrate -direction up
 docker compose --env-file .env up -d
-curl -fsS http://127.0.0.1:18080/health/ready   # {"postgres":"ok","redis":"ok"}
+curl -fsS http://127.0.0.1:18080/health/ready   # {"status":"ok"}
 curl -fsS http://127.0.0.1:18080/health/live
 ```
 
@@ -86,6 +86,15 @@ curl -fsS http://127.0.0.1:18080/health/live
   代理网段（如 `127.0.0.1/32` 或内网段），API 才会采信 `X-Forwarded-For` 的
   **最右一跳非受信地址**。反代务必用 `$proxy_add_x_forwarded_for` 追加、不要直接
   透传客户端发来的头；`X-Real-IP` 不参与判断（§11.6）。
+- **暴露面收敛**：对外只开 80 / 443；`api` 只绑 `127.0.0.1:18080`，
+  Postgres / Redis / S3 **不要加 `ports:`**（只留在 compose 内部网络）。
+  反代示例见 `deployments/production/nginx.conf.example`：deny 一切以点开头的路径
+  （`.git` / `.env` / `.workbuddy`）、`compose.yaml`、`go.mod`、`migrations`、
+  `deployments`、`scripts`、`bin`、`data`、`设计文档`、`参考资料`；
+  `/health/` 与 `/metrics` 只允许 `127.0.0.1`（应用层也会拒绝带代理头的请求）；
+  后台 `/admin` 建议再按来源 IP 收紧。Nuxt 侧有同名中间件做纵深防御，
+  `robots.txt` 同时禁止抓取后台与接口。镜像构建请使用仓库根的 `.dockerignore`，
+  不要把 `.git` / `.env` / `data` 打进镜像。
 
 ## 5. 运维要点
 

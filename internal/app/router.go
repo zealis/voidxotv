@@ -4,7 +4,9 @@ package app
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,17 +56,20 @@ type Dependencies struct {
 // NewRouter registers all routes and applies the shared middleware chain.
 func NewRouter(deps Dependencies) http.Handler {
 	mux := http.NewServeMux()
+	// 健康与指标只给本机（容器探针 / 运维）：反代就算误转发，也不会把
+	// 版本号、依赖状态、连接池指标暴露给外部。
 	// 存活探针同时回报版本号：排障时能一眼确认线上跑的是哪一版。
-	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) {
-		httpserver.JSON(w, http.StatusOK, map[string]string{
-			"status":  "ok",
-			"version": buildinfo.Version,
-		})
-	})
-	mux.HandleFunc("GET /health/ready", readyHandler(deps))
+	mux.Handle("GET /health/live", internalOnly(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			httpserver.JSON(w, http.StatusOK, map[string]string{
+				"status":  "ok",
+				"version": buildinfo.Version,
+			})
+		})))
+	mux.Handle("GET /health/ready", internalOnly(http.HandlerFunc(readyHandler(deps))))
 	// 指标端点（§13.2 最小基线）：路由计数 / 延迟直方图 / 连接池 / Outbox 深度。
 	if deps.Metrics != nil {
-		mux.Handle("GET /metrics", deps.Metrics.Prometheus(deps.DB))
+		mux.Handle("GET /metrics", internalOnly(deps.Metrics.Prometheus(deps.DB)))
 	}
 	if deps.Auth != nil {
 		deps.Auth.RegisterRoutes(mux)
@@ -160,6 +165,32 @@ func readyHandler(deps Dependencies) http.HandlerFunc {
 				httpserver.RequestIDFromContext(r.Context()))
 			return
 		}
-		httpserver.JSON(w, http.StatusOK, checks)
+		// 不返回各依赖的具体状态：健康信息只对运维有意义，不该暴露给外部。
+		httpserver.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
+}
+
+// internalOnly 只允许本机直连访问。容器健康检查走 127.0.0.1 且不带任何代理头；
+// 反向代理转发会带 X-Forwarded-For / X-Real-IP / Forwarded，一律按外部请求处理。
+func internalOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isInternalRequest(r) {
+			http.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isInternalRequest(r *http.Request) bool {
+	if r.Header.Get("X-Forwarded-For") != "" || r.Header.Get("X-Real-IP") != "" ||
+		r.Header.Get("Forwarded") != "" {
+		return false
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = strings.Trim(r.RemoteAddr, "[]")
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }

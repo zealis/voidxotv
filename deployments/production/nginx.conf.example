@@ -1,0 +1,55 @@
+# 夜街反向代理示例：对外只开 80 / 443，API、健康检查与指标都留在本机。
+# 用法：替换 server_name 与证书路径；upstream 按实际部署调整
+# （同机进程用 127.0.0.1:3000，反代在 compose 网络里可用 web:3000）。
+upstream yejie_web { server 127.0.0.1:3000; }
+upstream yejie_api { server 127.0.0.1:18080; }
+
+server {
+    listen 80;
+    server_name example.com;
+
+    # ACME 续期必须能访问，其它请求一律跳 HTTPS。
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name example.com;
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    # 1) 隐藏文件 / 源码 / 配置 / 迁移脚本一律不对外
+    location ~ /\.(?!well-known) { return 404; }
+    location ~* ^/(compose|docker-compose)\.ya?ml$ { return 404; }
+    location ~* ^/(go\.(mod|sum)|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|package\.json)$ { return 404; }
+    location ~* ^/(migrations|deployments|scripts|bin|data|tests|设计文档|参考资料)(/|$) { return 404; }
+
+    # 2) 健康检查与指标只给本机（容器探针 / 运维），不经过公网
+    location /health/ { allow 127.0.0.1; deny all; proxy_pass http://yejie_api; }
+    location = /metrics { allow 127.0.0.1; deny all; proxy_pass http://yejie_api; }
+
+    # 3) API
+    location /api/ {
+        proxy_pass http://yejie_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # 4) 页面（Nuxt）
+    location / {
+        proxy_pass http://yejie_web;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # 5) 后台可再收紧到办公网 / 固定 IP（按需取消注释）
+    # location /admin { allow 203.0.113.0/24; deny all; proxy_pass http://yejie_web; }
+
+    # 6) 拒绝 TRACE 等非常规方法
+    if ($request_method = TRACE) { return 405; }
+}

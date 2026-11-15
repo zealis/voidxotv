@@ -1,0 +1,9 @@
+User-agent: *
+Disallow: /admin
+Disallow: /api/
+Disallow: /studio
+Disallow: /settings
+Disallow: /messages
+Disallow: /library
+Disallow: /me
+Allow: /

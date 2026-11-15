@@ -1,0 +1,21 @@
+# 构建镜像时不要把源码之外的东西带进去：
+# .git 历史、环境变量、数据库数据、内部设计与参考资料、本地工具与截图。
+.git
+.gitignore
+.gitattributes
+.env
+.env.*
+!.env.example
+data
+.workbuddy
+.tools
+bin
+gui-test-screenshots
+设计文档
+参考资料
+node_modules
+**/node_modules
+.nuxt
+**/.nuxt
+.output
+**/.output

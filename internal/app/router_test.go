@@ -21,7 +21,9 @@ func testDependencies() Dependencies {
 
 func TestLive(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	NewRouter(testDependencies()).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	request.RemoteAddr = "127.0.0.1:1234"
+	NewRouter(testDependencies()).ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("live status = %d, want 200", recorder.Code)
 	}
@@ -45,6 +47,30 @@ func TestLive(t *testing.T) {
 	}
 }
 
+// 健康 / 指标只对本机直连开放：外部直连与反代转发（带代理头）一律 404。
+func TestHealthNotExposedOutsideLoopback(t *testing.T) {
+	router := NewRouter(testDependencies())
+	cases := []struct {
+		name   string
+		mutate func(*http.Request)
+	}{
+		{"外部直连", func(r *http.Request) { r.RemoteAddr = "203.0.113.5:1234" }},
+		{"反代转发", func(r *http.Request) {
+			r.RemoteAddr = "127.0.0.1:1234"
+			r.Header.Set("X-Forwarded-For", "203.0.113.5")
+		}},
+	}
+	for _, tc := range cases {
+		request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+		tc.mutate(request)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("%s: status = %d, want 404", tc.name, recorder.Code)
+		}
+	}
+}
+
 func TestNotFoundEnvelope(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	NewRouter(testDependencies()).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/nope", nil))
@@ -62,7 +88,9 @@ func TestNotFoundEnvelope(t *testing.T) {
 
 func TestReadyWithoutDependencies(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	NewRouter(testDependencies()).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+	request := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
+	request.RemoteAddr = "127.0.0.1:1234"
+	NewRouter(testDependencies()).ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", recorder.Code)
 	}
