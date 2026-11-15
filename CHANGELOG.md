@@ -39,6 +39,39 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.27.3] - 2026-11-15
+
+### 修复
+
+- **首页沉浸流 / 切视频时底栏闪现与控制条下方空白**：方向键或滚轮切条时底栏会短暂露出，
+  控制条同时离开贴底位置，下方留一条 61px 空区。根因：`switching`（切换窗口锁）只在
+  `watch(current)` 里置位，而 `current` 由 IntersectionObserver 滚到 ratio≥0.9 才更新
+  （已是滚动末尾）；滚动中间态 observer 的 `ratio < 0.9` 分支先 `player.pause()`，
+  `rawCollapsed` 变 false → 底栏展开。改法：`pages/index.vue` 抽 `beginSwitch()`，
+  在 observer 的「开始滚动」分支就锁住，`watch(current)` 只做兜底；方向键 `go()`
+  仍只负责 `scrollTo`，激活和滚轮 / 触摸走同一条 observer 路径。
+- **详情页视频播放失败 / `00:00 / 00:00`**：`useImmersivePlayer.ts` 的 mp4 分支设完
+  `src` 就立刻把 `state.ready` 置 true，元数据没到时控制条先显示 `00:00 / 00:00`
+  被当成播放失败；真报错也不会置回失败态，重试按钮还拿着 SSR/SWR 里可能过期的
+  签名 URL。改法：`state.ready` 改由 `loadedmetadata` 置位，`error` 时置回 false
+  并给「播放失败，点击重试」；`ImmersiveDetail.vue` 增加 `reloadDetail()`（重新取
+  公开详情刷新媒体地址后 `player.load`），失败时自动重试一次，重试按钮也走它。
+
+### 重构
+
+- **键盘控制两页统一**：`utils/playerKeys.ts` 只处理左右 ±5 秒定位；首页 ↑/↓ 切视频，
+  详情页 ↑/↓ 只阻止页面滚动（只有一条视频，没有下一条可切）。删掉 `volumeKeys`
+  开关、`volumeHint` prop 与 `ImmersiveItem.vue` / `ImmersiveDetail.vue` 里全部
+  音量提示定时器——键盘调音量取消，音量只由控制条滑块 / 静音键控制；音量浮层的
+  hover 宽容期逻辑不变。行为不变：左右键、输入框聚焦不抢键、空格 / m / f 快捷键。
+
+### 改进
+
+- `.tools/headless-test/m77-player-hotkeys.js` T2 改为「详情页上下键不调音量」；
+  新增 `m80-switch-chrome.js` 15 项（方向键 / 滚轮切换全程底栏收起且控制条贴底、
+  稳定后无空白、详情页无 `00:00 / 00:00`、两页键盘一致、拦截首次 mp4 请求后
+  自动重试恢复）；`m78-volume-hint.js` 因测的对象已移除而退役删除。
+
 ## [0.27.2] - 2026-11-15
 
 ### 修复

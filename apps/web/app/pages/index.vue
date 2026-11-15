@@ -97,12 +97,20 @@ watch(rawCollapsed, (next) => {
   chromeTimer = setTimeout(() => { chromeCollapsed.value = false }, 120)
 })
 
-// 切到另一条内容：图片回到默认收起，进入切换窗口。
-watch(current, () => {
-  imageNavPinned.value = false
+// 切换窗口：必须从「开始滚动」就锁住底栏，而不是等 IntersectionObserver 把
+// current 更新完（那已是滚动末尾）。否则中间态旧视频先 pause，rawCollapsed
+// 变 false → 底栏露一下，控制条同时离开贴底位置留下一条 61px 空区。
+// 滚轮 / 触摸滑动与方向键都走 observer 的同一条路径，因此统一在这里加锁。
+function beginSwitch() {
   switching.value = true
   if (switchTimer) clearTimeout(switchTimer)
   switchTimer = setTimeout(() => { switching.value = false }, 3000)
+}
+
+// 切到另一条内容：图片回到默认收起，并兜底进入切换窗口（例如瞬间跳转没有中间态）。
+watch(current, () => {
+  imageNavPinned.value = false
+  beginSwitch()
 }, { flush: 'sync' })
 
 // 新条目转码就绪或失败即结束切换窗口；失败时也要让用户能唤出底栏。
@@ -240,12 +248,16 @@ function setupObserver() {
       current.value = best.index
       void activateCurrent()
     } else if (best.ratio < 0.9) {
+      // 滚动中间态：滚轮、触摸、方向键都会走到这里，先锁底栏再暂停旧视频。
+      beginSwitch()
       player.pause()
     }
   }, { root, threshold: [0, 0.5, 0.75, 0.9, 1] })
   root.querySelectorAll('[data-feed-index]').forEach((element) => observer?.observe(element))
 }
 
+// 方向键切换只负责把滚动位置推到目标条目；激活、预载、底栏收起全部由
+// setupObserver() 处理，和鼠标滚轮 / 触摸滑动是同一套代码，不另写一套切换逻辑。
 function go(index: number) {
   const root = scroller.value
   if (!root) return
@@ -258,9 +270,9 @@ function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, [contenteditable="true"]')) return
   if (sheetOpen.value) return
-  // 首页沉浸流的 ↑/↓ 用来切换上一条 / 下一条视频（滚轮 / 触摸同样可切）；
+  // 首页沉浸流的 ↑/↓ 用来切换上一条 / 下一条视频（走 go()，与滚轮 / 触摸同一路径）；
   // 左右键 ±5 秒定位交给共享播放器工具，音量仍由鼠标悬停控制条滑块调节。
-  if (handlePlayerArrowKeys(event, player, { volumeKeys: false })) return
+  if (handlePlayerArrowKeys(event, player)) return
   switch (event.key) {
     case 'ArrowDown': event.preventDefault(); go(current.value + 1); break
     case 'ArrowUp': event.preventDefault(); go(current.value - 1); break

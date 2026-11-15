@@ -209,6 +209,10 @@ export function useImmersivePlayer(options: PlayerOptions = {}) {
         state.duration = entry.duration
         state.videoWidth = entry.videoWidth
         state.videoHeight = entry.videoHeight
+        // mp4 不再一设 src 就算就绪：元数据没到时控制条会先显示
+        // 00:00 / 00:00，看起来像播放失败。
+        state.ready = true
+        state.loading = false
       }
     })
     video.addEventListener('error', () => {
@@ -227,6 +231,8 @@ export function useImmersivePlayer(options: PlayerOptions = {}) {
       entry.loading = false
       state.failed = true
       state.loading = false
+      state.ready = false
+      state.message = '播放失败，点击重试'
     })
 
     entry = {
@@ -415,11 +421,11 @@ export function useImmersivePlayer(options: PlayerOptions = {}) {
       entry.usingHEVC = Boolean(media.hevc_url) && canPlayHEVC()
       entry.fallbackURL = media.media_url
       video.src = entry.usingHEVC ? media.hevc_url! : media.media_url
+      // 池内状态仍算已加载（切回来能直接续播）；UI 状态等 loadedmetadata
+      // 或 error 再定，避免把「还没拿到时长」误显示为播放失败。
       entry.ready = true
       entry.loading = false
       if (entry.slug === activeSlug) {
-        state.ready = true
-        state.loading = false
         if (autoplay) void video.play().catch(() => { state.playing = false })
       } else {
         video.pause()

@@ -103,6 +103,25 @@ const { state, applyServer, toggleLike, toggleFavorite, toggleFollow } = useInte
 const { open: openAuthDialog } = useAuthDialog()
 const { api } = useApi()
 const player = useImmersivePlayer()
+
+// 播放失败时用公开详情重新取一次媒体地址再重试：SSR / SWR 里的签名 URL
+// 可能已过期，原来的重试按钮一直拿旧地址反复失败。只自动重试一次，
+// 仍失败就把失败态留给界面，按钮也走同一条路径。
+let mediaRetried = false
+async function reloadDetail() {
+  if (!item.value) return
+  try {
+    const fresh = await $fetch<{ data: FeedItem }>(`/api/v1/feed/${encodeURIComponent(props.slug)}`)
+    if (fresh?.data?.media) item.value.media = fresh.data.media
+    await player.load(item.value)
+  } catch { /* 保留失败态，重试按钮仍可再点 */ }
+}
+watch(() => player.state.failed, (failed) => {
+  if (!failed || mediaRetried || item.value?.type !== 'video') return
+  mediaRetried = true
+  void reloadDetail()
+})
+
 // 服务端互动标记覆盖默认未点亮（§6.2）：详情带当前查看者的点赞 / 收藏。
 if (item.value) applyServer(item.value.slug, !!item.value.liked, !!item.value.favorited)
 // 观看进度（§9.1）：播放中定期上报，隐藏/离开补报；进入详情时取最近位置续播。
@@ -229,18 +248,13 @@ async function onFavorite(entry: FeedItem) {
   }
 }
 
-// 键盘改音量时递增，通知控制条把音量指示条临时唤出。
-const volumeHint = ref(0)
-
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, [contenteditable="true"]') || sheetOpen.value) return
-  // 左右 ±5 秒、上下 ±5% 音量；与首页沉浸流共用同一份实现。
-  const action = handlePlayerArrowKeys(event, player)
-  if (action) {
-    if (action === 'volume') volumeHint.value++
-    return
-  }
+  // 与首页共用同一份键盘处理：左右 ±5 秒定位；详情页只有一条视频，
+  // 上下键既不切视频也不调音量，只阻止页面滚动。音量走控制条滑块 / 静音键。
+  if (handlePlayerArrowKeys(event, player)) return
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); return }
   if (event.key === ' ') { event.preventDefault(); void player.toggle() }
   if (event.key === 'm' || event.key === 'M') player.setMuted(!player.state.muted)
   if (event.key === 'f' || event.key === 'F') void player.toggleFullscreen()
@@ -287,7 +301,6 @@ onBeforeUnmount(() => {
             :counts="item.stats" :label="formatCount" :player="player.state"
             :caption="caption(item.description)" :tags="tags(item.description)"
             :expanded="expanded" :nav-hidden="chromeCollapsed" :watchlisted="watchlisted"
-            :volume-hint="volumeHint"
             @toggle="player.toggle()" @like="onLike(item)"
             @toggle-chrome="toggleImageChrome"
             @comment="sheetOpen = true" @favorite="onFavorite(item)"
@@ -299,7 +312,7 @@ onBeforeUnmount(() => {
             @volume="player.setVolume($event)"
             @pip="player.requestPiP()" @fullscreen="player.toggleFullscreen()"
             @notice="notify($event)"
-            @retry="player.load(item)"
+            @retry="reloadDetail"
           />
         </div>
       </div>
