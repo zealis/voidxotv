@@ -678,6 +678,7 @@ function onSeek(event: MouseEvent) {
       @like="emit('like')" @comment="emit('comment')" @favorite="emit('favorite')"
       @share="emit('share')" @follow="emit('follow')"
       @watch-later="emit('watchLater')" @report="emit('report')"
+      @notice="emit('notice', $event)"
     />
 
     <InfoLayer

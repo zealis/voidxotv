@@ -3,6 +3,9 @@
 // 低频的「晚点再看」与「举报」收进分享下方三个点的菜单，避免操作栏被次要动作拉长。
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { FeedItem } from '~/composables/useFeed'
+import { errorMessage, useApi } from '~/composables/useApi'
+
+const { api } = useApi()
 
 const props = defineProps<{
   item: FeedItem
@@ -30,22 +33,50 @@ const emit = defineEmits<{
   follow: []
   watchLater: []
   report: []
+  notice: [text: string]
 }>()
 
 const moreOpen = ref(false)
 const moreWrap = ref<HTMLElement | null>(null)
 const moreButton = ref<HTMLButtonElement | null>(null)
 const watchLaterItem = ref<HTMLButtonElement | null>(null)
-const downloadItem = ref<HTMLAnchorElement | null>(null)
+const downloadItem = ref<HTMLButtonElement | null>(null)
 const reportItem = ref<HTMLButtonElement | null>(null)
 
-// 「下载原图」直接指向下载接口：服务端校验作品公开可见后回 302 到短时签名地址，
-// 并以 Content-Disposition: attachment 返回原图，浏览器不会把页面顶掉。
-const downloadHref = computed(() => {
+// 「下载原图」指向下载接口：服务端校验作品公开可见后返回短时签名地址，
+// 原图以 Content-Disposition: attachment 下发，页面不会被顶掉。
+const downloadPath = computed(() => {
   if (props.item.type !== 'image') return ''
   const index = Math.max(0, props.galleryIndex ?? 0)
   return `/api/v1/contents/${props.item.id}/images/${index}/download`
 })
+
+const downloading = ref(false)
+
+// 先问后端要签名地址（失败能给出提示），再用隐藏 iframe 触发下载：
+// 直接把 302 甩给浏览器的话，前端拿不到 Location，出错时会把整页换成 JSON。
+async function onDownload() {
+  closeMore()
+  if (!downloadPath.value || downloading.value) return
+  downloading.value = true
+  try {
+    const { url } = await api<{ url: string; filename: string }>(`${downloadPath.value}?format=json`)
+    if (!url) {
+      emit('notice', '原图暂时取不到，请稍后再试')
+      return
+    }
+    const frame = document.createElement('iframe')
+    frame.style.display = 'none'
+    frame.src = url
+    document.body.appendChild(frame)
+    // 留一分钟给浏览器接管下载，立即移除会中断请求。
+    window.setTimeout(() => frame.remove(), 60_000)
+  } catch (error) {
+    emit('notice', errorMessage(error))
+  } finally {
+    downloading.value = false
+  }
+}
 
 function closeMore(restoreFocus = false) {
   if (!moreOpen.value) return
@@ -174,14 +205,14 @@ onBeforeUnmount(() => {
           <span>{{ props.watchlisted ? '已在晚点再看' : '晚点再看' }}</span>
         </button>
         <!-- 图集才有原图：当前这张单独下载，列表里展示的是压缩过的展示图。 -->
-        <a
-          v-if="downloadHref"
-          ref="downloadItem" class="more-item" role="menuitem" :href="downloadHref"
-          rel="noopener" @click="closeMore()"
+        <button
+          v-if="downloadPath"
+          ref="downloadItem" type="button" class="more-item" role="menuitem"
+          :disabled="downloading" @click="onDownload"
         >
           <ImIcon name="download" :size="18" />
-          <span>下载原图</span>
-        </a>
+          <span>{{ downloading ? '准备中…' : '下载原图' }}</span>
+        </button>
         <button
           ref="reportItem" type="button" class="more-item" role="menuitem" @click="onReport"
         >
@@ -371,7 +402,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   width: 100%;
   padding: 9px 12px;
-  /* 「下载原图」是 <a>，要显式吃掉下划线与行内盒的内边距计算。 */
+  /* 显式 border-box：菜单是固定内边距的浮层，按钮宽度算上内边距才不会溢出。 */
   box-sizing: border-box;
   border: 0;
   border-radius: 8px;
@@ -383,6 +414,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .more-item:hover { background: rgba(255, 255, 255, 0.08); }
+.more-item:disabled { opacity: 0.7; cursor: default; }
 .more-item:focus-visible {
   outline: none;
   background: rgba(255, 255, 255, 0.08);

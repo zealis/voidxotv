@@ -667,6 +667,13 @@ func (h *Handler) downloadImage(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
+	// format=json 给前端用：前端拿不到 302 的 Location（浏览器把它当成
+	// opaqueredirect 隐藏），先取签名地址才能在失败时给出可操作提示，
+	// 再用隐藏 iframe 触发下载，避免把沉浸流页面顶掉。
+	if r.URL.Query().Get("format") == "json" {
+		httpserver.JSON(w, http.StatusOK, map[string]string{"url": signed, "filename": filename})
+		return
+	}
 	http.Redirect(w, r, signed, http.StatusFound)
 }
 
