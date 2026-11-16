@@ -264,7 +264,8 @@ func (h *Handler) detail(w http.ResponseWriter, r *http.Request) {
 	item, err := h.compose(r.Context(), row{
 		ID: entry.ID, Slug: entry.Slug, Type: entry.Type, Title: entry.Title,
 		Description: entry.Description, AuthorID: entry.AuthorID, Handle: handle,
-		PublishedAt: entry.PublishedAt,
+		PublishedAt: entry.PublishedAt, DurationMS: entry.DurationMS,
+		Origin: entry.Origin, SourceURL: entry.SourceURL,
 	}, true)
 	if err != nil {
 		// 已发布但产物缺失的内容对外等同不存在，不暴露「存在但坏了」。
@@ -294,6 +295,7 @@ func (h *Handler) compose(ctx context.Context, entry row, full bool) (Item, erro
 		Title: entry.Title, Description: entry.Description,
 		Author:      Author{ID: entry.AuthorID, Handle: entry.Handle, DisplayName: entry.DisplayName},
 		PublishedAt: entry.PublishedAt,
+		Origin:      entry.Origin, SourceURL: entry.SourceURL,
 	}
 	// 详情才带位置信息（§8 发布设置）：列表不查，省一次 join；图集与视频都要。
 	if full {

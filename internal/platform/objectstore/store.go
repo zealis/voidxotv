@@ -14,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -40,7 +41,23 @@ type Store struct {
 	region         string
 	publicEndpoint string
 	publicRead     bool
+
+	// 签名 GET 地址在有效期内复用（见 PresignGet）。key = 对象 key + "|" + ttl。
+	urlMu    sync.Mutex
+	urlCache map[string]cachedURL
 }
+
+type cachedURL struct {
+	url       string
+	expiresAt time.Time
+}
+
+// urlCacheMinValidity：缓存地址剩余有效期低于该值就重签，避免把「马上过期」的
+// 地址再发一次导致浏览器刚缓存就失效。
+const urlCacheMinValidity = time.Minute
+
+// urlCacheLimit：缓存条目上限，超过时顺手清一遍过期项（长驻进程防无界增长）。
+const urlCacheLimit = 8192
 
 func New(cfg config.Config) (*Store, error) {
 	if cfg.S3Endpoint == "" || cfg.S3Bucket == "" || cfg.S3AccessKey == "" || cfg.S3SecretKey == "" {
@@ -209,10 +226,42 @@ func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (
 	if ttl <= 0 || ttl > MaxGetURLTTL {
 		ttl = PlaybackTTL
 	}
-	signed, err := s.publicClient.PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
+	// 同一对象的签名地址在有效期内复用：预签名 URL 逐请求现签会产生不同地址，
+	// 浏览器缓存永远命中不了，图集 / 视频每次导航都会整体重新加载（观感=闪屏）。
+	cacheKey := key + "|" + strconv.FormatInt(int64(ttl), 10)
+	s.urlMu.Lock()
+	cached, ok := s.urlCache[cacheKey]
+	if ok && time.Until(cached.expiresAt) <= urlCacheMinValidity {
+		ok = false
+	}
+	if ok {
+		url := cached.url
+		s.urlMu.Unlock()
+		return url, nil
+	}
+	s.urlMu.Unlock()
+
+	params := url.Values{}
+	// 显式下发缓存指令：预签名 GET 默认无 Cache-Control，浏览器只能走启发式缓存。
+	params.Set("response-cache-control", "private, max-age="+strconv.FormatInt(int64(ttl.Seconds()), 10))
+	signed, err := s.publicClient.PresignedGetObject(ctx, s.bucket, key, ttl, params)
 	if err != nil {
 		return "", fmt.Errorf("objectstore: presign get: %w", err)
 	}
+
+	s.urlMu.Lock()
+	if s.urlCache == nil {
+		s.urlCache = make(map[string]cachedURL)
+	}
+	if len(s.urlCache) >= urlCacheLimit {
+		for k, v := range s.urlCache {
+			if time.Until(v.expiresAt) <= 0 {
+				delete(s.urlCache, k)
+			}
+		}
+	}
+	s.urlCache[cacheKey] = cachedURL{url: signed.String(), expiresAt: time.Now().Add(ttl)}
+	s.urlMu.Unlock()
 	return signed.String(), nil
 }
 

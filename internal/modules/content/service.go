@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -22,7 +24,34 @@ func (s *Service) CreateDraft(ctx context.Context, authorID int64, input CreateD
 	if err := validateTypeAndText(input.Type, input.Title, input.Description); err != nil {
 		return Content{}, err
 	}
+	if err := normalizeExternalDirect(&input); err != nil {
+		return Content{}, err
+	}
 	return s.repo.Create(ctx, authorID, input)
+}
+
+// normalizeExternalDirect 校验去中心化直链：origin=external_direct（视频不落存储、
+// 通过外部直链播放）时 source_url 必须是完整 http(s) 直链；其余一律按本站上传处理，
+// 不给客户端伪造 origin 的口子。
+func normalizeExternalDirect(input *CreateDraftInput) error {
+	if input.Origin != "external_direct" {
+		input.Origin = "uploaded"
+		input.SourceURL = ""
+		return nil
+	}
+	if input.Type != "video" {
+		return ErrInvalidType
+	}
+	raw := strings.TrimSpace(input.SourceURL)
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return ErrInvalidInput
+	}
+	input.SourceURL = raw
+	if input.DurationMS < 0 {
+		input.DurationMS = 0
+	}
+	return nil
 }
 
 func (s *Service) UpdateDraft(ctx context.Context, contentID, authorID int64, input UpdateDraftInput) (Content, error) {

@@ -22,6 +22,7 @@ const dialog = reactive({
 
 const reasonLabels: Record<string, string> = {
   vulgar: '低俗', copyright: '侵权', harassment: '骚扰', fraud: '诈骗', other: '其他',
+  dead_video: '视频失效',
 }
 type Tone = 'positive' | 'attention' | 'danger' | 'neutral'
 const statusMeta: Record<string, { text: string; tone: Tone }> = {

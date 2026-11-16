@@ -54,6 +54,7 @@ const kindText: Record<string, string> = {
   interaction: '互动',
   follow: '关注',
   moderation: '审核',
+  link: '链接',
   appeal: '申诉',
   report: '举报',
   account: '账号',
@@ -173,6 +174,8 @@ const menu = reactive<{ open: boolean; item: Notification | null; mode: 'actions
   open: false, item: null, mode: 'actions',
 })
 const busy = ref(false)
+// 删除通知在操作菜单里点「删除通知」后，再走一次统一确认弹窗。
+const removeConfirming = ref(false)
 
 function openMenu(item: Notification) {
   menu.item = item
@@ -193,6 +196,7 @@ async function removeItem() {
     }
     applyBuckets(data.unread_by_category)
     message.value = '已删除该通知'
+    removeConfirming.value = false
     menu.open = false
   } catch (error) {
     message.value = errorMessage(error)
@@ -313,7 +317,7 @@ function when(value: string): string {
             @click="markOne(menu.item); menu.open = false"
           >标为已读</button>
           <button type="button" class="btn" @click="menu.mode = 'mute'">免打扰此类通知…</button>
-          <button type="button" class="btn danger" :disabled="busy" @click="removeItem">
+          <button type="button" class="btn danger" :disabled="busy" @click="removeConfirming = true">
             {{ busy ? '删除中…' : '删除通知' }}
           </button>
           <button type="button" class="btn ghost" @click="menu.open = false">取消</button>
@@ -332,6 +336,13 @@ function when(value: string): string {
         </div>
       </template>
     </VpDialog>
+
+    <VpConfirmDialog
+      :open="removeConfirming" title="删除通知" :busy="busy"
+      @close="removeConfirming = false" @confirm="removeItem"
+    >
+      确定删除「{{ menu.item?.title || '该通知' }}」吗？删除后不再出现在消息列表。
+    </VpConfirmDialog>
 
     <BottomNav />
   </main>

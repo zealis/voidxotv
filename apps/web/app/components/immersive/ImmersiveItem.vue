@@ -686,6 +686,7 @@ function onSeek(event: MouseEvent) {
       :author="props.item.author.display_name || `用户${props.item.author.handle}`" :caption="props.caption"
       :tags="props.tags" :expanded="props.expanded" :poi="props.item.poi"
       :published-at="props.item.published_at"
+      :decentralized="props.item.origin === 'external_direct'"
       :danmaku="props.item.type === 'video'"
       @toggle-expand="emit('expand')"
       @danmaku="openMobileDanmaku"

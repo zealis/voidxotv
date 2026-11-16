@@ -14,9 +14,11 @@ import (
 )
 
 const contentColumns = `
-	id, slug, author_id, type, title, description, visibility, publish_state, review_status,
+	id, slug, author_id, type, title, description, origin, source_url, visibility, publish_state, review_status,
 	COALESCE(scheduled_at, 'epoch'::timestamptz), COALESCE(published_at, 'epoch'::timestamptz),
-	COALESCE(poi::text, '{}'), COALESCE(duration_ms, 0), feed_eligible, created_at, updated_at`
+	COALESCE(poi::text, '{}'), COALESCE(duration_ms, 0), feed_eligible,
+	COALESCE(source_fail_count, 0), COALESCE(source_checked_at, 'epoch'::timestamptz),
+	created_at, updated_at`
 
 type Repository struct {
 	db *pgxpool.Pool
@@ -38,9 +40,10 @@ func (r *Repository) Create(ctx context.Context, authorID int64, input CreateDra
 	if err != nil {
 		return Content{}, err
 	}
-	const query = `INSERT INTO contents (slug, author_id, type, title, description)
-		VALUES ($1, $2, $3, $4, $5) RETURNING ` + contentColumns
-	return r.scan(r.db.QueryRow(ctx, query, slug, authorID, input.Type, input.Title, input.Description))
+	const query = `INSERT INTO contents (slug, author_id, type, title, description, origin, source_url, duration_ms)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ` + contentColumns
+	return r.scan(r.db.QueryRow(ctx, query, slug, authorID, input.Type, input.Title, input.Description,
+		input.Origin, input.SourceURL, input.DurationMS))
 }
 
 func (r *Repository) UpdateDraft(ctx context.Context, contentID, authorID int64, input UpdateDraftInput) (Content, error) {
@@ -192,10 +195,13 @@ func (r *Repository) scan(row pgx.Row) (Content, error) {
 	var scheduledAt, publishedAt time.Time
 	var poiText string
 	var durationMS int64
+	var failCount int
+	var checkedAt time.Time
 	if err := row.Scan(
 		&content.ID, &content.Slug, &content.AuthorID, &content.Type, &content.Title, &content.Description,
-		&content.Visibility, &content.PublishState, &content.ReviewStatus,
+		&content.Origin, &content.SourceURL, &content.Visibility, &content.PublishState, &content.ReviewStatus,
 		&scheduledAt, &publishedAt, &poiText, &durationMS, &content.FeedEligible,
+		&failCount, &checkedAt,
 		&content.CreatedAt, &content.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -212,6 +218,12 @@ func (r *Repository) scan(row pgx.Row) (Content, error) {
 		content.PublishedAt = &value
 	}
 	content.POI = json.RawMessage(poiText)
+	content.DurationMS = durationMS
+	content.SourceFailCount = failCount
+	if checkedAt.Year() > 1970 {
+		value := checkedAt
+		content.SourceCheckedAt = &value
+	}
 	return content, nil
 }
 

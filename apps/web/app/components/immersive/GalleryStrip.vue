@@ -117,7 +117,9 @@ watch(() => props.index, (value) => {
   place-items: center;
 }
 .slide img { max-width: 100%; max-height: 100%; object-fit: contain; }
-/* 切换按钮固定在中部两侧，首尾成环所以两颗常驻；内缩量见 .gallery 的自定义属性。 */
+/* 切换按钮固定在中部两侧，首尾成环所以两颗常驻；内缩量见 .gallery 的自定义属性。
+   静置近乎透明、只留一圈淡白轮廓（深浅画面都认得出），hover 才垫出深色圆底，
+   避免常驻的实心圆盘压在画面上太抢眼。 */
 .arrow {
   position: absolute;
   top: 50%;
@@ -127,16 +129,18 @@ watch(() => props.index, (value) => {
   display: grid;
   place-items: center;
   padding: 0;
-  border: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 50%;
   color: #fff;
-  background: rgba(10, 10, 20, 0.55);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  background: transparent;
   cursor: pointer;
-  transition: background 160ms ease, opacity 160ms ease;
+  transition: background 160ms ease, border-color 160ms ease;
 }
-.arrow:hover { background: rgba(10, 10, 20, 0.72); }
+.arrow:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(10, 10, 20, 0.72);
+}
 .arrow:active { background: rgba(10, 10, 20, 0.82); }
 .arrow:focus-visible { outline: 2px solid var(--vp-im-accent); outline-offset: 2px; }
 .arrow.left { left: var(--gallery-arrow-inset); }
@@ -144,8 +148,11 @@ watch(() => props.index, (value) => {
 /* 右箭头只翻图标，不翻按钮：`rotate` 单独作用在按钮上会和 translateY(-50%)
    叠成半颗按钮的高度差，两颗箭头一高一低。 */
 .arrow.right :deep(svg) { transform: rotate(180deg); }
-/* 手机上按钮略小，内缩量与桌面同一口径——保证仍让开右侧头像 / 点赞那一列。 */
+/* 静置没有深色圆底，给箭头一点投影，亮色画面上仍认得出。 */
+.arrow :deep(svg) { filter: drop-shadow(0 1px 2px rgba(10, 10, 31, 0.45)); }
+/* 手机上再缩一号（40 → 32px），图标同比例缩：静置只有一圈轮廓，太大反而压画面。 */
 @media (max-width: 780px) {
-  .arrow { width: 40px; height: 40px; }
+  .arrow { width: 32px; height: 32px; }
+  .arrow :deep(svg) { width: 16px; height: 16px; }
 }
 </style>

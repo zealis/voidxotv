@@ -95,6 +95,9 @@ func run() error {
 	// 定时发布执行器（§8）：到点的 scheduled 内容转 published 并写 content.published 事件。
 	go content.NewScheduler(db, log).Run(ctx, 30*time.Second)
 
+	// 去中心化在线地址存活检测（external_direct）：连续失败退推荐流并通知作者。
+	go content.NewSourceChecker(db, log).Run(ctx, 30*time.Minute)
+
 	// 邮件投递（§11.7）：消费 outbox 里的 email.send，经自建 SMTP 发出；
 	// 未配置 SMTP 时事件直接进死信并留原因，不阻塞其他消费。
 	emailSender := email.NewSender(cfg)

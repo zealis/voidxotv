@@ -49,12 +49,96 @@ const draftId = ref<number | null>(null)
 const draftStatus = ref('')
 const savingDraft = ref(false)
 // §8.1 图集发布：与视频模式共用字段与设置，切换的是媒体输入与提交链路。
-type PublishMode = 'video' | 'image'
+type PublishMode = 'video' | 'image' | 'decentralized'
 interface GalleryItem {
   id: number; position: number; url: string
   mime_type: string; byte_size: number
 }
 const mode = ref<PublishMode>('video')
+// 去中心化（在线地址）：用户粘贴在线视频地址，前端用隐藏 <video> 探测访问状态
+// （可播 / 不可播 + 时长 + 分辨率），视频不落存储、发布后通过该地址播放。
+// 媒体元素拉 metadata 不受 CORS 限制，跨域地址也能探测。
+const sourceLink = ref('')
+const linkError = ref('')
+const probeState = ref<'idle' | 'probing' | 'ok' | 'fail'>('idle')
+const probeInfo = ref<{ duration: number; width: number; height: number } | null>(null)
+const probeMessage = ref('')
+const probeSource = ref('')
+let probeVideo: HTMLVideoElement | null = null
+let probeTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(sourceLink, () => {
+  // 链接一改，旧检测结果作废，等下次「检测」。
+  probeState.value = 'idle'
+  probeInfo.value = null
+  probeMessage.value = ''
+  linkError.value = ''
+})
+
+function cleanupProbe() {
+  if (probeTimer) { clearTimeout(probeTimer); probeTimer = null }
+  if (probeVideo) {
+    // 先摘掉回调再清 src：清 src 本身会触发 error 事件，
+    // 不摘的话刚写入的成功结果会被它覆盖成「不可播放」。
+    probeVideo.onloadedmetadata = null
+    probeVideo.onerror = null
+    probeVideo.removeAttribute('src')
+    probeVideo = null
+  }
+}
+
+function finishProbe(ok: boolean, message = '', info?: { duration: number; width: number; height: number }) {
+  cleanupProbe()
+  if (ok && info) {
+    probeInfo.value = info
+    try { probeSource.value = new URL(sourceLink.value.trim()).hostname.replace(/^www\./, '') } catch { probeSource.value = '' }
+    probeState.value = 'ok'
+  } else {
+    probeMessage.value = message || '地址无法访问'
+    probeState.value = 'fail'
+  }
+}
+
+function probeLink() {
+  const raw = sourceLink.value.trim()
+  if (!raw || busy.value) return
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('protocol')
+  } catch {
+    probeState.value = 'idle'
+    probeInfo.value = null
+    probeMessage.value = ''
+    linkError.value = '地址格式不对，请粘贴完整的在线视频地址（https://…）'
+    return
+  }
+  linkError.value = ''
+  probeInfo.value = null
+  probeMessage.value = ''
+  probeState.value = 'probing'
+  cleanupProbe()
+  const video = document.createElement('video')
+  video.preload = 'metadata'
+  video.muted = true
+  probeVideo = video
+  // 15s 兜底：断链可能长时间不回包；失败（404 / 不是视频）走 error 事件。
+  probeTimer = setTimeout(() => finishProbe(false, '检测超时：地址长时间无响应'), 15000)
+  video.onloadedmetadata = () => {
+    finishProbe(true, '', { duration: video.duration, width: video.videoWidth, height: video.videoHeight })
+  }
+  video.onerror = () => finishProbe(false, '地址无法访问，或不是可播放的视频文件')
+  video.src = raw
+  video.load()
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00'
+  const total = Math.round(seconds)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`
+}
 const galleryState = ref({ count: 0, ready: 0, busy: false, valid: false, coverUrl: '' })
 const galleryRef = ref<{
   hydrate: (items: GalleryItem[]) => void
@@ -70,7 +154,7 @@ const busy = ref(false)
 const stage = ref('待上传')
 // 按钮的阶段感知文案（§8.1 上传进度可见）：用户视线在按钮上，进度不在下方进度区时也能看到进展。
 const busyLabel = computed(() => {
-  if (!busy.value) return mode.value === 'image' ? '发布图集' : '上传并发布'
+  if (!busy.value) return mode.value === 'image' ? '发布图集' : mode.value === 'decentralized' ? '发布' : '上传并发布'
   const part = stage.value.match(/^上传分片 (\d+)\/(\d+)$/)
   if (part) return `上传中 ${Math.round(((Number(part[1]) - 1) / Number(part[2])) * 100)}%`
   if (stage.value.startsWith('转码状态')) return '转码中…'
@@ -81,6 +165,14 @@ const busyLabel = computed(() => {
 })
 const progress = ref(0)
 const uploadedBytes = ref(0)
+// 「2 · 处理进度」的显隐：只有真有上传动作（视频选了文件、图集有图在传或未就绪）
+// 才出现；发布完成的结果块也挂在这节里，发布后必须保持可见。
+const progressVisible = computed(() => {
+  if (busy.value || published.value) return true
+  if (mode.value === 'video') return !!file.value || !!playback.value
+  if (mode.value === 'decentralized') return false
+  return galleryState.value.busy || galleryState.value.ready < galleryState.value.count
+})
 const logs = ref<string[]>([])
 const errorText = ref('')
 const published = ref(false)
@@ -109,6 +201,7 @@ watch([title, description, visibility, poi, topicIds, scheduledAt], () => {
 })
 onBeforeUnmount(() => {
   if (draftTimer) clearTimeout(draftTimer)
+  cleanupProbe()
   if (localPreviewUrl.value) URL.revokeObjectURL(localPreviewUrl.value)
 })
 
@@ -123,9 +216,13 @@ function draftPayload() {
 }
 
 async function saveDraft(force = false): Promise<boolean> {
+  // 去中心化：地址检测通过才落库，避免把失效地址存成草稿。
+  const decentralized = mode.value === 'decentralized'
+  if (decentralized && probeState.value !== 'ok') return false
   if (!me.value || busy.value || savingDraft.value) return false
   const hasContent = title.value.trim() || description.value.trim()
     || topicIds.value.length || (mode.value === 'image' && galleryState.value.count > 0)
+    || (decentralized && !!sourceLink.value.trim())
   if (!draftId.value && !hasContent && !force) return false
   savingDraft.value = true
   draftStatus.value = '正在自动保存草稿…'
@@ -133,7 +230,14 @@ async function saveDraft(force = false): Promise<boolean> {
     if (!draftId.value) {
       const created = await api<{ id: number }>('/api/v1/contents', {
         method: 'POST',
-        body: { type: mode.value, title: title.value, description: description.value },
+        body: decentralized
+          ? {
+              type: 'video', origin: 'external_direct',
+              source_url: sourceLink.value.trim(),
+              duration_ms: Math.round((probeInfo.value?.duration ?? 0) * 1000),
+              title: title.value, description: description.value,
+            }
+          : { type: mode.value, title: title.value, description: description.value },
       })
       draftId.value = created.id
     }
@@ -161,7 +265,7 @@ async function restoreDraft() {
   if (isNew) return
   restoringDraft = true
   try {
-    const data = await api<{ items: Array<{ id: number; type: string; title: string; description: string; visibility: string; poi?: POIValue; publish_state: string; scheduled_at?: string }> }>(
+    const data = await api<{ items: Array<{ id: number; type: string; origin?: string; source_url?: string; title: string; description: string; visibility: string; poi?: POIValue; publish_state: string; scheduled_at?: string }> }>(
       '/api/v1/contents/mine?limit=100&state=draft',
     )
     const drafts = (data.items || []).filter((item) => item.publish_state === 'draft')
@@ -178,7 +282,13 @@ async function restoreDraft() {
     }
     if (!draft) return
     draftId.value = draft.id
-    mode.value = draft.type === 'image' ? 'image' : 'video'
+    // 去中心化草稿：进直链模式并自动重测一遍可访问性。
+    if (draft.origin === 'external_direct') {
+      mode.value = 'decentralized'
+      sourceLink.value = draft.source_url || ''
+    } else {
+      mode.value = draft.type === 'image' ? 'image' : 'video'
+    }
     title.value = draft.title || ''
     description.value = draft.description || ''
     visibility.value = draft.visibility || 'public'
@@ -194,6 +304,7 @@ async function restoreDraft() {
       await nextTick()
       galleryRef.value?.hydrate(images.items || [])
     }
+    if (mode.value === 'decentralized' && sourceLink.value.trim()) void probeLink()
     draftStatus.value = statusText
   } catch { /* 没有草稿或暂不可用时保持空白编辑态 */ }
   finally {
@@ -224,6 +335,11 @@ async function setMode(next: PublishMode) {
   galleryRef.value?.reset()
   pendingCover.value = null
   coverError.value = ''
+  // 切出去中心化时旧检测结果作废（输入的链接文字保留，切回来不用重打）。
+  probeState.value = 'idle'
+  probeInfo.value = null
+  probeMessage.value = ''
+  linkError.value = ''
   mode.value = next
   errorText.value = ''
   publishedSlug.value = ''
@@ -271,6 +387,48 @@ async function submitGallery() {
     // 发布成功后重置草稿引用与图集状态（旧 content 已非 draft）。
     draftId.value = 0
     galleryState.value = { count: 0, ready: 0, busy: false, valid: false, coverUrl: '' }
+  } catch (error) {
+    stage.value = '失败'
+    errorText.value = errorMessage(error)
+    log(`失败：${errorMessage(error)}`)
+  } finally {
+    busy.value = false
+  }
+}
+
+// 去中心化发布：直链检测通过后建草稿 → 发布，无上传 / 转码环节，
+// 观众端直接通过原始链接播放（Contents.origin=external_direct）。
+async function submitDecentralized() {
+  if (probeState.value !== 'ok') {
+    errorText.value = '请先检测地址，确认可播放后再发布'
+    return
+  }
+  errorText.value = ''
+  stage.value = '提交在线地址作品'
+  // 与视频路径同一纪律：必须在 busy=true 之前保存，忙状态下 saveDraft 会跳过。
+  log('先确认草稿已落库…')
+  const ok = await saveDraft(true)
+  if (!ok || !draftId.value) { errorText.value = '草稿保存失败，无法发布'; return }
+  busy.value = true
+  logs.value = []
+  progress.value = 0
+  try {
+    const publishBody: Record<string, unknown> = {
+      visibility: visibility.value,
+      poi: poi.value ? { name: poi.value.name, address: poi.value.address } : {},
+    }
+    if (scheduledAt.value) publishBody.scheduled_at = new Date(scheduledAt.value).toISOString()
+    const result = await api<{ slug: string; review_status: string }>(
+      `/api/v1/contents/${draftId.value}/publish`, { method: 'POST', body: publishBody },
+    )
+    published.value = true
+    publishedSlug.value = result.slug
+    publishedReview.value = result.review_status || 'pending'
+    draftStatus.value = scheduledAt.value ? '已提交定时发布' : '已发布'
+    progress.value = 100
+    stage.value = '已完成'
+    log('发布成功，观众将通过在线地址播放')
+    draftId.value = 0
   } catch (error) {
     stage.value = '失败'
     errorText.value = errorMessage(error)
@@ -372,6 +530,7 @@ async function submit() {
   const scheduleError = settingsRef.value?.scheduleError
   if (scheduleError) { errorText.value = scheduleError; return }
   if (mode.value === 'image') { await submitGallery(); return }
+  if (mode.value === 'decentralized') { await submitDecentralized(); return }
 
   const selected = file.value
   if (!selected) { errorText.value = '请先选择视频文件'; return }
@@ -581,12 +740,54 @@ async function signOut() {
             :class="{ on: mode === 'image' }" :disabled="busy"
             @click="setMode('image')"
           >图集</button>
-          <span class="mode-hint">{{ mode === 'image' ? '2–18 张图片，首图为封面' : '单条视频' }}</span>
+          <button
+            type="button" role="tab" :aria-selected="mode === 'decentralized'"
+            :class="{ on: mode === 'decentralized' }" :disabled="busy"
+            @click="setMode('decentralized')"
+          >在线地址</button>
+          <span class="mode-hint">{{ mode === 'image' ? '2–18 张图片，首图为封面' : mode === 'decentralized' ? '不存储视频，通过地址播放' : '单条视频' }}</span>
         </div>
 
         <section class="work-area" aria-label="作品文件与预览">
-          <h2>1 · {{ mode === 'image' ? '选择图片' : '选择视频' }}</h2>
-          <template v-if="mode === 'video'">
+          <h2>1 · {{ mode === 'image' ? '选择图片' : mode === 'decentralized' ? '在线地址' : '选择视频' }}</h2>
+          <template v-if="mode === 'decentralized'">
+            <label class="link-field">
+              <span>在线地址</span>
+              <div class="link-row">
+                <input
+                  v-model="sourceLink" type="url" inputmode="url" autocomplete="off"
+                  placeholder="粘贴在线视频地址，如 https://example.com/video.mp4"
+                  :disabled="busy" @keyup.enter="probeLink"
+                />
+                <button
+                  type="button" class="parse"
+                  :disabled="busy || !sourceLink.trim() || probeState === 'probing'" @click="probeLink"
+                >{{ probeState === 'probing' ? '检测中…' : '检测' }}</button>
+              </div>
+              <small>支持 MP4 / WebM 等在线视频地址；视频不存储在本站，发布后通过该地址播放。</small>
+            </label>
+            <div v-if="probeState === 'probing'" class="probe-status" role="status">正在检测地址可访问性…</div>
+            <div v-else-if="probeState === 'ok'" class="link-card">
+              <div class="link-card-head">
+                <span v-if="probeSource" class="platform">{{ probeSource }}</span>
+                <span class="pill ok">可播放</span>
+                <span class="meta">时长 {{ formatDuration(probeInfo?.duration ?? 0) }} · {{ probeInfo?.width }}×{{ probeInfo?.height }}</span>
+              </div>
+              <video
+                :key="sourceLink" class="probe-preview" :src="sourceLink"
+                controls playsinline preload="metadata"
+              />
+              <p class="link-note">视频不存储在本站，发布后通过此地址播放；标题与简介请在右侧手动填写。</p>
+            </div>
+            <div v-else-if="probeState === 'fail'" class="link-card fail">
+              <div class="link-card-head">
+                <span class="pill fail">不可播放</span>
+                <span class="meta">{{ probeMessage }}</span>
+              </div>
+            </div>
+            <p v-if="linkError" class="link-error" role="alert">{{ linkError }}</p>
+          </template>
+          <template v-else-if="mode === 'video'">
             <label class="drop" :class="{ filled: !!file }">
               <input type="file" accept="video/*" :disabled="busy" @change="onFileChange" />
               <span class="drop-icon" aria-hidden="true">＋</span>
@@ -622,7 +823,7 @@ async function signOut() {
           @change="onCoverChange"
           @error="onCoverError"
         />
-        <section v-else class="cover-strip" aria-label="封面状态">
+        <section v-else-if="mode === 'image'" class="cover-strip" aria-label="封面状态">
           <div class="cover-thumb">
             <img v-if="galleryState.coverUrl" :src="galleryState.coverUrl" alt="图集首图封面" />
             <span v-else class="cover-placeholder">封面</span>
@@ -634,11 +835,22 @@ async function signOut() {
         </section>
         <p v-if="coverError" class="cover-error" role="alert">{{ coverError }}</p>
 
-        <section class="progress-area" aria-label="上传与处理状态">
+        <!-- 「2 · 处理进度」只在真有上传动作时出现：视频选了文件 / 图集有图在上传，
+             或发布完成（结果块挂在这节里，发布后必须保持可见）。 -->
+        <section v-if="progressVisible" class="progress-area" aria-label="上传与处理状态">
           <h2>2 · 处理进度</h2>
           <div class="stage"><span class="pulse" :class="{ done: published }" />{{ stage }}</div>
           <div class="bar"><div :style="{ width: `${progress}%` }" /></div>
           <p class="counter">{{ mode === 'image' ? `${galleryState.ready}/${galleryState.count} 张图片已就绪` : `${formatBytes(uploadedBytes)} / ${file ? formatBytes(file.size) : '0 B'} · ${progress}%` }}</p>
+
+          <div v-if="published && mode === 'decentralized'" class="result ok">
+            <h3>在线地址作品发布完成</h3>
+            <p>视频不落存储，观众通过在线地址播放。</p>
+            <p v-if="publishedReview === 'pending'" class="review-hint">
+              作品已提交审核，通过后会出现在公开页面；审核状态可在「我」页查看。
+            </p>
+            <NuxtLink v-if="publishedSlug" class="primary-link" :to="`/video/${publishedSlug}`">查看作品</NuxtLink>
+          </div>
 
           <div v-if="published && mode === 'image'" class="result ok">
             <h3>图集发布完成</h3>
@@ -698,18 +910,20 @@ async function signOut() {
         <p v-if="draftStatus" class="draft-status" role="status">{{ draftStatus }}</p>
         <div class="publish-actions">
           <button
-            class="secondary" type="button" :disabled="busy || savingDraft"
+            class="secondary" type="button"
+            :disabled="busy || savingDraft || (mode === 'decentralized' && probeState !== 'ok')"
             @click="saveDraft(true)"
           >{{ savingDraft ? '保存中…' : '存为草稿' }}</button>
           <button
             class="primary" type="button"
-            :disabled="busy || (mode === 'video' ? !file : !galleryState.valid)"
+            :disabled="busy || (mode === 'decentralized' ? probeState !== 'ok' : (mode === 'video' ? !file : !galleryState.valid))"
             @click="submit"
           >
-            {{ busy ? busyLabel : (mode === 'image' ? '发布图集' : '上传并发布') }}
+            {{ busy ? busyLabel : (mode === 'image' ? '发布图集' : '发布') }}
           </button>
         </div>
-        <p class="note">编辑内容会自动保存为草稿。</p>
+        <p v-if="mode === 'decentralized'" class="note">地址检测通过后即可发布；视频不落存储，观众通过在线地址播放。</p>
+        <p v-else class="note">编辑内容会自动保存为草稿。</p>
         <p v-if="errorText" class="error" role="alert">{{ errorText }}</p>
       </div>
     </aside>
@@ -797,6 +1011,47 @@ async function signOut() {
 .drop small { font-size: 11px; color: var(--vp-tool-text-2); }
 .file-meta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 11px; color: var(--vp-tool-text-2); }
 .local-preview { display: block; width: 100%; max-height: 260px; margin-top: 12px; border-radius: 9px; object-fit: contain; background: #000; }
+/* ── 去中心化（前台样式先行）────────────────────────────────────
+   链接输入 + 解析按钮 + 结果卡；解析 / 播放接口接入后回填数据。 */
+.link-field { display: grid; gap: 8px; }
+.link-field > span { font-size: 12px; color: var(--vp-tool-text-2); }
+.link-row { display: flex; gap: 10px; }
+.link-row input {
+  flex: 1; min-width: 0; box-sizing: border-box; padding: 11px 12px; border-radius: 10px;
+  border: 1px solid var(--vp-tool-border); background: var(--vp-tool-input); color: var(--vp-tool-text);
+  font-size: 14px; font-family: inherit; outline: none;
+}
+.link-row input:focus-visible { border-color: var(--vp-tool-accent); }
+.link-row .parse {
+  padding: 0 20px; border: 0; border-radius: 10px; cursor: pointer;
+  background: var(--vp-tool-accent); color: var(--vp-tool-on-accent); font-size: 14px; font-weight: 600; font-family: inherit;
+}
+.link-row .parse:disabled { opacity: .5; cursor: not-allowed; }
+.link-field > small { font-size: 11px; line-height: 1.6; color: var(--vp-tool-text-2); }
+.link-card {
+  margin-top: 12px; padding: 14px; border-radius: 12px;
+  border: 1px solid var(--vp-tool-border); background: var(--vp-tool-surface);
+}
+.link-card.fail { border-color: var(--vp-tool-danger-border); }
+.link-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.platform {
+  padding: 3px 10px; border-radius: 999px; font-size: 12px;
+  background: var(--vp-tool-accent-soft); color: var(--vp-tool-accent-ink);
+}
+.pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.pill.ok { background: var(--vp-tool-accent-soft); color: var(--vp-tool-accent-ink); }
+.pill.fail { background: var(--vp-tool-danger-soft); color: var(--vp-tool-danger-ink); }
+.meta { font-size: 12px; color: var(--vp-tool-text-2); }
+.probe-preview {
+  display: block; width: 100%; max-height: 240px; border-radius: 9px;
+  object-fit: contain; background: #000; margin-bottom: 10px;
+}
+.probe-status {
+  margin-top: 12px; padding: 14px; border-radius: 12px; font-size: 13px;
+  border: 1px dashed var(--vp-tool-border-strong); color: var(--vp-tool-text-2);
+}
+.link-note { margin: 0; font-size: 12px; line-height: 1.7; color: var(--vp-tool-text-2); }
+.link-error { margin: 10px 0 0; font-size: 12px; color: var(--vp-tool-danger); }
 .note { margin: 10px 0 0; font-size: 11px; line-height: 1.6; color: var(--vp-tool-text-2); }
 
 .cover-strip { display: flex; gap: 12px; align-items: center; margin-top: 14px; padding: 12px; border: 1px solid var(--vp-tool-border); border-radius: 12px; background: var(--vp-tool-surface); }

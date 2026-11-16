@@ -47,6 +47,8 @@ const bio = ref('')
 const avatarUrl = ref('')
 const avatarPreview = ref('')
 const avatarBusy = ref(false)
+// 移除头像走统一二次确认弹窗：确认后仍需密码 step-up（服务端闸门）。
+const avatarConfirming = ref(false)
 const quietOn = ref(false)
 const quietStart = ref(1320)
 const quietEnd = ref(480)
@@ -197,10 +199,12 @@ async function onAvatarPick(event: Event) {
 }
 
 async function removeAvatar() {
+  if (avatarBusy.value) return
   avatarBusy.value = true
   message.value = ''
   try {
     await api('/api/v1/me/avatar', { method: 'DELETE' })
+    avatarConfirming.value = false
     avatarUrl.value = ''
     if (profile.value) profile.value.avatar_url = ''
     message.value = '已恢复默认头像'
@@ -388,7 +392,7 @@ onBeforeUnmount(() => {
             >随机头像</button>
             <button
               v-if="avatarUrl && !avatarBusy" type="button" class="avatar-btn ghost"
-              @click="removeAvatar"
+              @click="avatarConfirming = true"
             >移除</button>
           </div>
         </div>
@@ -617,6 +621,14 @@ onBeforeUnmount(() => {
           </button>
         </div>
     </VpDialog>
+
+    <VpConfirmDialog
+      :open="avatarConfirming" title="移除头像" :busy="avatarBusy"
+      confirm-text="移除" busy-text="移除中…"
+      @close="avatarConfirming = false" @confirm="removeAvatar"
+    >
+      确定移除当前头像吗？移除后恢复系统默认头像。
+    </VpConfirmDialog>
   </main>
 </template>
 

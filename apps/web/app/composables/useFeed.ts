@@ -37,6 +37,9 @@ export interface FeedItem {
   title: string
   description: string
   author: FeedAuthor
+  // 去中心化（external_direct）：仅这类作品下发，作者名旁展示图标并支持前往源站。
+  origin?: 'uploaded' | 'external_direct' | 'external_imported'
+  source_url?: string
   published_at?: string
   stats: FeedStats
   media: FeedMedia

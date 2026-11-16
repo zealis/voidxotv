@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 举报对话框：把已有后端（POST /api/v1/reports，24 小时并单，§9.5）接到前台。
 // 理由枚举与 admin repository 的 validReasons 对齐；处置结果通过站内「系统」通知反馈。
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ApiError, errorMessage } from '~/composables/useApi'
 
 const props = defineProps<{
@@ -10,16 +10,20 @@ const props = defineProps<{
   contentTitle: string
   /** 举报对象：默认作品；评论区传 comment，object_id 即评论 id。 */
   objectType?: 'content' | 'comment'
+  /** 去中心化（external_direct）视频：多一个「视频失效」理由（直链可能失效）。 */
+  deadVideo?: boolean
 }>()
 const emit = defineEmits<{ close: []; reported: [] }>()
 
-const REASONS = [
+// 去中心化视频多一个「视频失效」：直链可能被源站下架或失效，观众据此举报。
+const REASONS = computed(() => [
   { value: 'vulgar', label: '低俗色情' },
   { value: 'copyright', label: '侵权盗版' },
   { value: 'harassment', label: '骚扰辱骂' },
   { value: 'fraud', label: '欺诈诈骗' },
   { value: 'other', label: '其他问题' },
-]
+  ...(props.deadVideo ? [{ value: 'dead_video', label: '视频失效' }] : []),
+])
 
 const { api, getMe } = useApi()
 

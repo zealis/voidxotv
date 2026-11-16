@@ -26,7 +26,12 @@ const CSP = [
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: ${IMG_ORIGINS.join(' ')}`,
-  `media-src 'self' blob: ${MEDIA_ORIGINS.join(' ')}`,
+  // media-src 追加 https:：去中心化发布的视频直链可来自任意 https 源
+  // （不落存储、按链接播放），媒体域白名单只覆盖本站自有媒体。
+  `media-src 'self' blob: https: ${MEDIA_ORIGINS.join(' ')}`,
+  // frame-src 不能省：缺省时回落 default-src 'self'，「下载原图」的隐藏
+  // iframe 指向媒体域签名地址，会被静默拦截，点击看起来毫无反应。
+  `frame-src 'self' ${MEDIA_ORIGINS.join(' ')}`,
   // blob: 是 hls.js 取 MSE playlist/分片的通道（播放器把签名 master 包成
   // Blob URL 再 fetch）；缺它整个 HLS 播放在浏览器里直接失败。
   `connect-src 'self' blob: ${CONNECT_ORIGINS.join(' ')}`,

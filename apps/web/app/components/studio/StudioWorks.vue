@@ -37,6 +37,8 @@ const message = ref('')
 const saved = ref('')
 const galleryImages = ref<GalleryImage[]>([])
 const galleryBusy = ref(false)
+// 删图片走统一二次确认弹窗，待删的是 media_asset id。
+const galleryRemoving = ref<number | null>(null)
 const busy = ref<Record<number, boolean>>({})
 const confirming = ref<number | null>(null)
 const edit = reactive({
@@ -178,8 +180,9 @@ async function addGalleryImage(event: Event) {
   }
 }
 
-async function removeGalleryImage(assetID: number) {
-  if (galleryBusy.value || galleryImages.value.length <= 2 || !edit.id) return
+async function removeGalleryImage() {
+  const assetID = galleryRemoving.value
+  if (!assetID || galleryBusy.value || galleryImages.value.length <= 2 || !edit.id) return
   galleryBusy.value = true
   edit.error = ''
   try {
@@ -187,6 +190,7 @@ async function removeGalleryImage(assetID: number) {
       `/api/v1/contents/${edit.id}/images/${assetID}`, { method: 'DELETE' },
     )
     galleryImages.value = data.items || []
+    galleryRemoving.value = null
     flash('图片已删除')
   } catch (error) {
     edit.error = errorMessage(error)
@@ -455,7 +459,7 @@ onBeforeUnmount(() => {
                 <button
                   type="button" class="btn pick danger" :disabled="galleryBusy || galleryImages.length <= 2"
                   :aria-label="`删除第 ${index + 1} 张图片`"
-                  @click="removeGalleryImage(image.id)"
+                  @click="galleryRemoving = image.id"
                 >删除</button>
               </div>
             </li>
@@ -480,6 +484,13 @@ onBeforeUnmount(() => {
           </button>
         </div>
     </VpDialog>
+
+    <VpConfirmDialog
+      :open="galleryRemoving !== null" title="删除图片" :busy="galleryBusy"
+      @close="galleryRemoving = null" @confirm="removeGalleryImage"
+    >
+      确定删除这张图片吗？图集至少要保留 2 张，删除后需要重新上传才能加回。
+    </VpConfirmDialog>
   </section>
 </template>
 

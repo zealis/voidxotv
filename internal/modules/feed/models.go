@@ -69,6 +69,10 @@ type Item struct {
 	// 仅 feed 列表与详情下发；匿名响应与公开缓存页（creator / topic）省略。
 	Liked     bool `json:"liked,omitempty"`
 	Favorited bool `json:"favorited,omitempty"`
+	// 去中心化（external_direct）：下发来源与直链，前端在作者名旁展示
+	// 「去中心化」图标（点击前往源站）。普通上传作品省略这两个字段。
+	Origin    string `json:"origin,omitempty"`
+	SourceURL string `json:"source_url,omitempty"`
 }
 
 type Response struct {

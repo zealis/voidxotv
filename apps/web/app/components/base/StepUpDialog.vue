@@ -1,8 +1,7 @@
 <script setup lang="ts">
 // 敏感操作的身份确认弹窗：前台与后台共用，按 state.scope 调对应接口。
 // 后台开了 TOTP 的账号会先收到 totp_required，再显示验证码输入框。
-import { ElButton, ElDialog, ElInput } from 'element-plus'
-
+// 壳与登录弹窗一致走 VpDialog（UI 规范 §11.3：内容页只用 Vp* 封装组件）。
 const { state, succeed, cancel } = useStepUp()
 const { api } = useApi()
 
@@ -68,51 +67,87 @@ async function submit() {
 </script>
 
 <template>
-  <ElDialog
-    :model-value="state.open" title="确认身份" width="400px"
-    :close-on-click-modal="false" @close="cancel"
+  <VpDialog
+    :open="state.open" title="确认身份" :busy="busy"
+    :data-surface="state.surface"
+    initial-focus=".field input" @close="cancel"
   >
     <p class="tip">{{ state.reason }}</p>
 
-    <label class="field-label">登录密码</label>
-    <ElInput
-      v-model="password" type="password" show-password autocomplete="current-password"
-      placeholder="请输入当前登录密码" @keyup.enter="submit"
-    />
+    <form @submit.prevent="submit">
+      <label class="field">
+        <span>登录密码</span>
+        <input
+          v-model="password" type="password" autocomplete="current-password"
+          placeholder="请输入当前登录密码"
+        />
+      </label>
 
-    <template v-if="needTotp">
-      <label class="field-label">动态验证码</label>
-      <ElInput
-        v-model="totp" maxlength="6" inputmode="numeric"
-        placeholder="6 位验证码" @keyup.enter="submit"
-      />
-    </template>
+      <label v-if="needTotp" class="field">
+        <span>动态验证码</span>
+        <input
+          v-model="totp" maxlength="6" inputmode="numeric"
+          autocomplete="one-time-code" placeholder="6 位验证码"
+        />
+      </label>
 
-    <p v-if="error" class="error">{{ error }}</p>
+      <p v-if="error" class="err" role="alert">{{ error }}</p>
 
-    <template #footer>
-      <ElButton @click="cancel">取消</ElButton>
-      <ElButton type="primary" :loading="busy" @click="submit">确认</ElButton>
-    </template>
-  </ElDialog>
+      <div class="dialog-actions">
+        <button type="button" class="btn" @click="cancel">取消</button>
+        <button type="submit" class="btn primary" :disabled="busy">
+          {{ busy ? '验证中…' : '确认' }}
+        </button>
+      </div>
+    </form>
+  </VpDialog>
 </template>
 
 <style scoped>
 .tip {
-  margin: 0 0 12px;
+  margin: -4px 0 14px;
   font-size: 12px;
-  line-height: 1.7;
-  color: #a1a1aa;
+  line-height: 1.6;
+  color: var(--vp-tool-text-2);
 }
-.field-label {
-  display: block;
-  margin: 10px 0 6px;
+form { display: grid; gap: 12px; }
+.field { display: grid; gap: 6px; }
+.field span { font-size: 12px; color: var(--vp-tool-text-2); }
+.field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--vp-tool-input-border);
+  background: var(--vp-tool-input);
+  color: var(--vp-tool-text);
+  font-size: 14px;
+  outline: none;
+}
+.field input:focus-visible { border-color: var(--vp-color-brand); }
+.field input::placeholder { color: var(--vp-tool-text-2); opacity: 0.7; }
+.err {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--vp-tool-danger-soft);
+  color: var(--vp-tool-danger-ink);
   font-size: 12px;
-  color: #a1a1aa;
 }
-.error {
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: #ff6961;
+.dialog-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.btn {
+  padding: 9px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid var(--vp-tool-border);
+  background: transparent;
+  color: inherit;
 }
+.btn.primary {
+  background: var(--vp-tool-accent);
+  border-color: transparent;
+  color: var(--vp-tool-on-accent);
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

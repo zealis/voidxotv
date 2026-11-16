@@ -139,8 +139,6 @@ onBeforeUnmount(() => {
       <AdminAccounts v-else-if="active === 'accounts'" />
       <p v-else class="empty">当前角色没有可访问的模块。</p>
     </main>
-    <!-- 后台敏感操作（处置 / 封禁 / 合并 / 停用 / 重置密码 / 重算）的身份确认。 -->
-    <StepUpDialog />
   </div>
 </template>
 

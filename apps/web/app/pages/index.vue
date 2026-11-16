@@ -450,6 +450,7 @@ onBeforeUnmount(() => {
     <ReportDialog
       :open="reportOpen" :content-id="currentItem?.id ?? 0"
       :content-title="currentItem?.title || ''"
+      :dead-video="currentItem?.origin === 'external_direct'"
       @close="reportOpen = false"
       @reported="onReported"
     />

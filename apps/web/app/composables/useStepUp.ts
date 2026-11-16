@@ -9,6 +9,11 @@ interface StepUpState {
   open: boolean
   scope: StepUpScope
   reason: string
+  /**
+   * 唤起时所在页面的表面类型。弹窗挂在 app.vue、在 [data-surface] 容器之外，
+   * 不显式标记的话拿不到工具页的浅色令牌，只会在 :root 深色默认值上渲染。
+   */
+  surface: 'tool' | 'immersive'
   tokens: Record<StepUpScope, StepUpToken>
 }
 
@@ -20,11 +25,19 @@ function settle(token: string | null) {
   for (const resolve of list) resolve(token)
 }
 
+function currentSurface(): 'tool' | 'immersive' {
+  if (!import.meta.client) return 'immersive'
+  const host = document.querySelector<HTMLElement>('[data-surface]')
+  const value = host?.dataset.surface
+  return value === 'tool' ? 'tool' : 'immersive'
+}
+
 export function useStepUp() {
   const state = useState<StepUpState>('stepup', () => ({
     open: false,
     scope: 'user',
     reason: '',
+    surface: 'immersive',
     tokens: { user: { token: '', expiresAt: 0 }, admin: { token: '', expiresAt: 0 } },
   }))
 
@@ -40,6 +53,7 @@ export function useStepUp() {
     if (!state.value.open) {
       state.value.scope = scope
       state.value.reason = reason
+      state.value.surface = currentSurface()
       state.value.open = true
     }
     return new Promise((resolve) => { pendingResolvers.push(resolve) })

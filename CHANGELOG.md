@@ -39,6 +39,294 @@
 
 <!-- 下次改动写在这里；发布时由 bump-version.mjs 提升为正式版本条目。 -->
 
+## [0.35.0] - 2026-11-15
+
+### 新增
+
+- **在线地址存活检测：失效的外部视频自动退出推荐流并通知作者**：去中心化视频的
+  外部地址可能被源站下架 / 改链，观众无法自知。worker 新增周期探测器（默认 30 分钟
+  一轮，启动即先跑一轮，单轮最多 100 条最久未检测优先，并发 5）：
+  - 探测方式：Range GET 拉 1 字节（部分源站对 HEAD 表现异常），2xx/3xx 可达，
+    10s 超时；连续失败 **3 次**才判定失效（单次抖动不下架）。
+  - 失效：退出推荐流（feed_eligible=false，审核状态不变）并给作者发一次系统通知
+    「在线地址视频失效」（kind=link）。
+  - 恢复：地址恢复可访问自动回到推荐流，并通知作者「在线地址已恢复」。
+  - `migrations/000026_source_check.{up,down}.sql`（contents 增加 source_fail_count /
+    source_checked_at，并随 Content 接口下发）。
+  - `internal/modules/content/sourcecheck.go`（探测器）、`cmd/worker/main.go`（接线）、
+    `internal/modules/content/{models,repository}.go`（列下发）、
+    `apps/web/app/pages/messages.vue`（kind=link 标签「链接」）。
+  - 验证：E2E 三轮重启——死链 fail 1→2→3（跨阈值退出推荐流 + 通知入库）、好链
+    fail 恒 0 且 checked_at 更新；DB 改回可用地址后重启 → fail 清零 + feed_eligible
+    恢复 + 「在线地址已恢复」通知；go 门禁全过。
+
+## [0.34.9] - 2026-11-15
+
+### 修复
+
+- **进入图集（含上下滑动到该条）屏幕闪一下**：媒体地址走的是 S3 预签名 URL，而
+  `PresignGet` 每次请求都现签——同一张图每次拿到的地址都不同，浏览器 HTTP 缓存
+  永远命中不了，每次导航都全量重新下载，加载期间深色背景 + 裂图 alt 裸露
+  （headless 连拍抓到 1.4s+ 的裂图期）。两层修复：
+  - 签名地址在有效期内复用：objectstore 增加内存级地址缓存（key=对象+TTL，剩余
+    有效期 <1min 才重签，条目上限 8192 顺手清过期），图集 / 视频 / 海报的地址在
+    TTL 窗口内保持不变。
+  - 预签名 GET 显式下发 `response-cache-control: private, max-age=<TTL>`——原来
+    响应无缓存指令，浏览器只能走启发式缓存。
+  - `internal/platform/objectstore/store.go`。
+  - 验证：两次 feed 调用地址完全一致（原来逐次不同）；签名地址 GET 响应带
+    `cache-control: private, max-age=1800`；headless 冷 / 热两次进入图集，图片
+    `complete=true naturalWidth=2457`，热访问首帧即完整渲染（对比修复前 1.4s+
+    裂图期）。go 门禁全过。
+
+## [0.34.8] - 2026-11-15
+
+### 修复
+
+- **回退去中心化图标的 -2px 光学偏移**：0.34.7 的 `translateY(-2px)` 实拍后整体偏高，
+  恢复 0.34.6 的盒中心对齐（`align-self: center`，无位移）。悬浮说明与交互不受影响。
+  - `apps/web/app/components/immersive/InfoLayer.vue`。
+
+## [0.34.7] - 2026-11-15
+
+### 修复
+
+- **去中心化图标视觉上仍低于作者名**：0.34.4 的盒中心对齐量的是盒子，而文字字形集中在
+  行盒上半部（基线以下留了降部空档），16px 图标按盒中心摆放后光学上仍偏低约 2px。
+  图标整体 `translateY(-2px)` 找回字形的光学中心；headless 2x 实拍确认与用户名同一
+  视觉水平线。
+  - `apps/web/app/components/immersive/InfoLayer.vue`。
+
+## [0.34.6] - 2026-11-15
+
+### 改进
+
+- **去中心化模式更名「在线地址」，来源图标改为纯标识**：
+  - 创作中心发布形态第三个 tab、区块标题、输入框标签与提示语统一改为「在线地址」
+    （placeholder / 说明 / 检测文案同步），去中心化的定位口播化：视频来自用户提供的
+    在线地址，本网不存储、发布后按地址播放。
+  - 沉浸页来源图标不再可点（删除「前往原始网站」跳转），改为纯来源标识；
+    悬浮说明改为「视频系用户链接展示播放，本网未存储此视频。」
+  - `apps/web/app/pages/publish.vue`（文案与日志）、
+    `apps/web/app/components/immersive/{InfoLayer,ImmersiveItem}.vue`
+    （sourceUrl prop 改为 decentralized 布尔，图标不再需要直链）。
+  - 验证：headless 实拍创作中心改名后的界面；沉浸页图标为 span、无 href、悬浮文案
+    正确、位置不变（作者名右侧）；typecheck 过。
+
+## [0.34.5] - 2026-11-15
+
+### 修复
+
+- **去中心化图标没有悬浮说明、点击也不跳转**：两层原因叠加——① 信息层 `.info` 整层是
+  `pointer-events: none`（点击穿透到画面），弹幕入口等交互子元素都单独放行了
+  `pointer-events: auto`，新加的图标漏了，悬浮与点击全部穿透；② 信息层（z=40）被
+  播放控制条（z=41，后写）盖住，作者行恰好在控制条盒子里，即使放行命中也落在控制条上。
+  修复：图标补 `pointer-events: auto`；`.info` 层级提到 `controls + 1`（信息层除图标外
+  仍是穿透，控制条按钮不受影响）。另外「前往原始网站」从新标签页改为**当前标签页跳转**：
+  新标签页在内嵌浏览器窗格里会被静默拦截（与下载、弹窗同类限制），真机浏览器不受影响，
+  但内嵌窗格用户点了毫无反应——跳转必须真的发生。
+  - `apps/web/app/components/immersive/InfoLayer.vue`。
+  - 验证：headless 实测 `pointer-events=auto`、elementFromPoint 命中图标本身、点击后
+    当前页导航到 source_url 直链；typecheck 过。
+
+## [0.34.4] - 2026-11-15
+
+### 修复
+
+- **去中心化图标与作者名不在同一水平线**：`.decentralized` 原来跟随 `.author` 行的
+  baseline 对齐，而 SVG 的基线在底边，图标整体比文字低半截。改为 `align-self: center`
+  + 内部 `align-items: center`，与作者名垂直居中（实测两中心差 0px，尺寸仍 16px）。
+  - `apps/web/app/components/immersive/InfoLayer.vue`。
+
+## [0.34.3] - 2026-11-15
+
+### 改进
+
+- **去中心化图标再换版：绿色全球网络标志**：按用户提供的 SVG 替换（viewBox 0 0 1024 1024，
+  #39FF14 随 SVG 自带），尺寸继续沿用 1em 与作者名同高（16px）；hover 提示、点击前往
+  源站行为不变。
+  - `apps/web/app/components/immersive/InfoLayer.vue`。
+  - 验证：headless 实拍 `用户000381 [绿色图标] · 刚刚`，iconSize=16px=nameSize；
+    前端 typecheck 过。
+
+## [0.34.2] - 2026-11-15
+
+### 改进
+
+- **去中心化图标换为橙色立体网络盒标志，尺寸与作者名一致**：按用户提供的 SVG 替换
+  （viewBox 0 0 1024 1024，#FF7500 随 SVG 自带），去掉 15px 字号覆写改为继承作者行
+  的 16px——`width/height=1em` 与用户名完全同高；hover 提示、点击前往源站行为不变。
+  - `apps/web/app/components/immersive/InfoLayer.vue`。
+  - 验证：headless 实拍 `用户000381 [图标] · 2分钟前`，iconSize=16px=nameSize；
+    前端 typecheck 过。
+
+## [0.34.1] - 2026-11-15
+
+### 新增
+
+- **去中心化作品标识与「视频失效」举报**：
+  - 沉浸页信息层作者名右侧新增去中心化图标（external_direct 视频专属）：悬浮提示
+    「此条视频使用去中心化存储。」，点击新开标签页前往原始网站（`rel=noopener`）。
+    `feed.Item` / 搜索结果下发 `origin` + `source_url`（`omitempty`，普通上传作品不下发）。
+  - 举报理由新增「视频失效」（`dead_video`）：去中心化视频的直链可能被源站下架，观众
+    可据此举报；仅此类作品的举报弹窗出现该选项。迁移 000025 放开 `reports_reason_check`
+    约束（原 CHECK 只有五个理由，新增理由会撞 500），后台举报中心理由标签同步补充。
+  - `internal/modules/feed/{models,handler,repository}.go`、`internal/modules/search/repository.go`、
+    `internal/modules/admin/repository.go`、`migrations/000025_report_dead_video.{up,down}.sql`。
+  - `apps/web/app/components/immersive/{InfoLayer,ImmersiveItem,ReportDialog}.vue`、
+    `apps/web/app/pages/index.vue`、`apps/web/app/composables/useFeed.ts`。
+  - 验证：图标渲染在用户名右侧（headless 实拍确认位置与悬浮提示）、新标签 `noopener`；
+    dead_video 举报入库（case 201，验收后驳回 + 内容已删）；go 门禁 + 前端 typecheck 过。
+
+## [0.34.0] - 2026-11-15
+
+### 新增
+
+- **去中心化发布后端接入，端到端真正可发布、可播放**：接上 0.33.0 / 0.33.1 留下的提交口。
+  视频不落存储：`contents` 增加 `source_url` 列（迁移 000024），创建接口接受
+  `origin=external_direct` + `source_url` + `duration_ms`（服务端校验 http(s) 直链与
+  类型匹配，其余情况一律按 `uploaded` 处理，不给伪造 origin 的口子）；发布沿用审核管线
+  （pending → 审核通过后 feed_eligible）。播放：playback 对 external_direct 直接把
+  source_url 当唯一可播文件返回（Mode=mp4），信息流 detail / 列表查询补齐 origin、
+  source_url 两列并贯穿 `asContent`，否则会被「无可用产物」判定挤出去。
+  - `migrations/000024_external_direct.{up,down}.sql`。
+  - `internal/modules/content/{models,service,handler,repository}.go`：模型与创建校验。
+  - `internal/modules/playback/handler.go`：external_direct 分支。
+  - `internal/modules/feed/{repository,handler}.go`：列表与详情查询补列、`asContent`
+    贯穿 Origin / SourceURL / DurationMS。
+  - `apps/web/app/pages/publish.vue`：去中心化提交放开——「检测通过」即可存草稿（创建时
+    带 origin / source_url / duration_ms）与发布；发布完成展示结果卡（查看作品入口）；
+    从草稿箱恢复 external_direct 草稿会回到直链模式并自动重测。修一个提交顺序 bug：
+    `submitDecentralized` 原先在 `busy=true` 之后才调 `saveDraft`，忙状态守卫直接拒绝
+    （与视频路径同一陷阱，提交必须先于 busy）。
+  - 验证：端到端——发布（external_direct 入库）→ 管理员审核通过 → 公开 playback 返回
+    `status=ready / mode=mp4 / 直链` → 沉浸页 `<video>` 直链播放（readyState 4，headless
+    实拍 `00:04/01:00` 正常推进）→ 推荐流收录；go 全门禁 + 前端 typecheck 过。
+    验收数据（内容 219 与三份测试草稿）发布验证后已删除。
+
+## [0.33.1] - 2026-11-15
+
+### 新增
+
+- **去中心化改为视频直链 + 访问状态检测（播放就绪）**：输入从「其他平台链接」改为
+  **视频直链**（MP4 / WebM 等文件地址），「解析」改为「检测」——前端用隐藏 `<video>`
+  拉 metadata 探测访问状态（媒体元素不受 CORS 限制，跨域直链也能测），可播时展示
+  来源、时长、分辨率与**内嵌预览播放器**（直链即播，验证「不落存储、按链接播放」），
+  不可播（404 / 非视频 / 15s 超时）给出明确失败态。
+  - `apps/web/app/pages/publish.vue`：`parseLink` 重写为 `probeLink` 状态机
+    （probing / ok / fail），链接变更即作废旧结果，卸载时清理探测元素。
+  - `apps/web/server/plugins/security-headers.ts`：`media-src` 追加 `https:`——
+    直链可来自任意 https 源，媒体域白名单只覆盖本站自有媒体；否则生产环境收紧
+    媒体域后该功能会被 CSP 静默拦截（同 0.32.6 下载 iframe 的坑）。
+  - 修探测竞态：成功清理探测元素时清 src 会触发 error 事件，先摘回调再清，
+    否则「可播放」会被覆盖成「不可播放」。
+  - 发布提交仍停用（后端内容类型未接入，按钮禁用 + 提示语保留）。
+
+## [0.33.0] - 2026-11-15
+
+### 新增
+
+- **发布页新增「去中心化」形态（前台样式先行）**：发布形态在 视频 / 图集 之外新增第三个
+  tab——粘贴其他平台视频链接，点「解析」做前台格式校验并识别来源平台；解析接口接入后
+  将自动获取标题 / 简介并回填右侧「作品信息」表单。定位：视频不存储在本站，发布后通过
+  原始链接播放。当前为前台样式先行：解析走纯前端占位（不调用第三方接口），该模式下
+  存草稿 / 自动保存 / 提交全部停用（后端尚无对应类型），发布按钮禁用并提示
+  「去中心化发布即将开放」；解析接口与视频播放实现后续单独接入。
+  - `apps/web/app/pages/publish.vue`：`PublishMode` 增加 `decentralized`；链接输入 +
+    解析按钮 + 结果卡样式；`saveDraft` / `submit` 对该模式守卫；「2 · 处理进度」对该
+    模式隐藏；切换模式时旧解析结果作废（输入的链接文字保留）。
+
+## [0.32.10] - 2026-11-15
+
+### 改进
+
+- **发布页「2 · 处理进度」只在真有上传动作时出现**：原来没选文件 / 图集没在传时也常驻
+  「待上传 0%」，占位却无信息量。现在视频模式选了文件（或转码产物预览就绪）、图集模式
+  有图片在上传或未就绪时才出现；发布完成的结果块（查看图集 / 产物预览）挂在这节里，
+  发布后必须保持可见。编辑全部就绪的旧图集草稿不再显示这块。
+  - `apps/web/app/pages/publish.vue`（新增 `progressVisible` computed）。
+
+## [0.32.9] - 2026-11-15
+
+### 改进
+
+- **沉浸页顶栏改为与底栏同一套收起逻辑**：顶部「关注 / 推荐 + 搜索」原来常驻，播放视频时
+  压在画面上。现在与底栏共用 `chromeCollapsed` 状态——视频播放中（或图集浏览态）顶栏
+  上滑退场，暂停（视频）或点画面（图集）才回来；桌面端（≥781px）生效、移动端仍常驻，
+  动效与底栏一致（200ms + 位移）。收起语义仍由页面层计算，ChromeBars 只消费
+  `collapsed` 这一个 prop。
+  - `apps/web/app/components/immersive/ChromeBars.vue`。
+
+## [0.32.8] - 2026-11-15
+
+### 改进
+
+- **手机上图集切换箭头偏大**：静置态只剩一圈轮廓后，40px 的按钮在手机宽度下仍显得
+  突兀。移动端（≤780px）缩到 32px、图标 20 → 16px 同比例缩；点击切换行为不变。
+  - `apps/web/app/components/immersive/GalleryStrip.vue`。
+
+## [0.32.7] - 2026-11-15
+
+### 改进
+
+- **图集左右切换按钮静置时太抢眼**：两颗箭头常驻且静置就是 55% 深色实心圆盘
+  （0.32.2 内缩改版带来的常驻），压在画面上比作者头像还显眼。改为静置透明、
+  只留一圈 35% 淡白轮廓（44px 圆 + 箭头带轻投影，深浅画面都认得出），
+  hover 才垫出 72% 深色圆底、active 更深；焦点环与点击切换、首尾成环行为不变。
+  - `apps/web/app/components/immersive/GalleryStrip.vue`。
+
+## [0.32.6] - 2026-11-15
+
+### 修复
+
+- **点「下载原图」没有任何反应**：0.32.1 起下载原图改成「先取签名地址 → 隐藏 iframe 触发
+  下载」，但页面 CSP 一直没有 `frame-src`，缺省回落 `default-src 'self'`，指向媒体域
+  （开发 `http://127.0.0.1:9100`，生产为 CDN）的 iframe 被浏览器静默拦截——预检请求正常
+  返回、界面无任何报错，只有控制台一条 CSP 违规，用户看起来就是点了没反应。
+  - `apps/web/server/plugins/security-headers.ts`：CSP 增加 `frame-src 'self' + 媒体域`，
+    与 img-src / media-src 同一来源口径；iframe 里的响应本身带
+    `Content-Disposition: attachment`，下载语义不变。
+  - `.tools/headless-test/m96-ui-gallery-download.js`：新增 CSP `frame-src` 放行断言，
+    防止以后再被静默拦掉；`.tools/headless-test/probe-download-real.js`：真实浏览器
+    下载探针（headless Chrome 实点「下载原图」，断言文件真实落盘与文件名）。
+  - 验证：probe 在 headless Chrome 里实点后 `哈哈哈-1.jpg`（1,556,989 字节，与原图一致）
+    落盘；m96 API 回归 25 项、m96-ui 12 项全过。注意 ZCode 内嵌浏览器窗格不呈现下载
+    事件（顶导 302→attachment 也不触发），验收要用真实 Chrome / m96 探针。
+
+## [0.32.5] - 2026-11-15
+
+### 改进
+
+- **删除类操作全部补齐二次确认弹窗**：除退出登录与后台（后台沿用 Element Plus 自带确认）外，
+  前台所有删除入口逐个核对，缺确认的四处接入新的统一确认弹窗 `VpConfirmDialog`
+  （基于 VpDialog：取消键默认聚焦、危险色确认键、确认后保持 busy 直到收尾，
+  失败信息仍由所在页面展示）：
+  - 设置页「移除头像」：原来点「移除」直接弹密码框，没先说清要删什么；
+  - 发布页图集编辑「删除图片」：原来点 × 直接删；
+  - 创作者中心编辑作品「删除图片」：同上（仍保留「图集至少 2 张」下限）；
+  - 消息页「删除通知」：原来操作菜单里点「删除通知」立即删。
+  已有确认维持原样：删除草稿 / 批量删除草稿（VpDialog 弹窗）、删除作品 / 删除评论
+  （创作者中心与评论抽屉的两步按钮确认；评论抽屉为避免抽屉内焦点嵌套特意不用弹窗）。
+  各删除的服务端密码 step-up 闸门不变，确认弹窗只加在密码框之前。
+  - 新增 `apps/web/app/components/base/VpConfirmDialog.vue`。
+
+## [0.32.4] - 2026-11-15
+
+### 修复
+
+- **「确认身份」弹窗换统一外壳，修掉密码框聚焦时错位的矩形粉框**：前台 / 后台共用的二次确认
+  弹窗此前用 Element Plus 的 ElDialog / ElInput / ElButton，白底蓝按钮与全站统一外壳
+  （VpDialog + `--vp-tool-*` 令牌）两套观感；且全站 focus 环画在 EP 输入框的内层 `input` 上，
+  聚焦时出现一个与圆角输入框错位、悬浮在字段中间的矩形粉框。改为：
+  - `apps/web/app/components/base/StepUpDialog.vue`：壳换成 VpDialog，输入框与按钮改原生控件，
+    样式对齐登录弹窗（同一套输入框 / 软危险错误块令牌）；TOTP 验证码分支与提交重试逻辑不变。
+  - `apps/web/app/composables/useStepUp.ts`：state 增加 `surface`，唤起时记录当前
+    `[data-surface]`，弹窗据此继承工具页浅色令牌（与登录弹窗同一机制，沉浸页恒深色）。
+  - `apps/web/app/pages/admin/index.vue`：移除后台页内的重复挂载——app.vue 已全局挂一份，
+    此前后台页会叠两个一模一样的弹窗。
+  - `.tools/headless-test/m90-stepup.js`：T4 选择器从 `.el-dialog` 系列改到 `.vp-dialog` 系列，
+    15 项全过。
+
 ## [0.32.3] - 2026-11-15
 
 ### 改进

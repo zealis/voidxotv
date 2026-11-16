@@ -85,6 +85,10 @@ type createRequest struct {
 	Type        string `json:"type"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
+	// 去中心化：origin=external_direct 时 source_url 必填（视频直链，不落存储）。
+	Origin     string `json:"origin"`
+	SourceURL  string `json:"source_url"`
+	DurationMS int64  `json:"duration_ms"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +105,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	principal, _ := auth.PrincipalFromContext(r.Context())
 	content, err := h.svc.CreateDraft(r.Context(), principal.UserID, CreateDraftInput{
 		Type: request.Type, Title: request.Title, Description: request.Description,
+		Origin: request.Origin, SourceURL: request.SourceURL, DurationMS: request.DurationMS,
 	})
 	if err != nil {
 		h.writeError(w, r, err)

@@ -45,7 +45,7 @@ func (r *Repository) Search(ctx context.Context, criteria Criteria, pattern stri
 	durationMin, durationMax := durationBounds(criteria.Duration)
 	rows, err := r.db.Query(ctx, `
 		WITH matched AS (
-		  SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle,
+		  SELECT c.id, c.slug, c.type, c.title, c.description, c.origin, c.source_url, c.author_id, u.handle,
 		         COALESCE(c.published_at, 'epoch'::timestamptz) AS published_at,
 		         COALESCE(c.duration_ms, 0) AS duration_ms,
 		         CASE
@@ -85,7 +85,7 @@ func (r *Repository) Search(ctx context.Context, criteria Criteria, pattern stri
 		      AND ($7::bigint = 0 OR COALESCE(c.duration_ms, 0) <= $7::bigint)
 		    ))
 		)
-		SELECT id, slug, type, title, description, author_id, handle,
+		SELECT id, slug, type, title, description, origin, source_url, author_id, handle,
 		       published_at, duration_ms, score
 		FROM matched
 		WHERE ($8::float8 = 0 AND $9::bigint = 0)
@@ -109,7 +109,7 @@ func (r *Repository) ListByCategory(ctx context.Context, categoryID, viewerID, c
 	limit int) ([]feed.Entry, error) {
 
 	rows, err := r.db.Query(ctx, `
-		SELECT c.id, c.slug, c.type, c.title, c.description, c.author_id, u.handle,
+		SELECT c.id, c.slug, c.type, c.title, c.description, c.origin, c.source_url, c.author_id, u.handle,
 		       COALESCE(c.published_at, 'epoch'::timestamptz), COALESCE(c.duration_ms, 0),
 		       0::float8 AS score
 		FROM contents c
@@ -136,7 +136,7 @@ func scanEntries(rows pgx.Rows) ([]feed.Entry, error) {
 		var item feed.Entry
 		var publishedAt time.Time
 		if err := rows.Scan(&item.ID, &item.Slug, &item.Type, &item.Title, &item.Description,
-			&item.AuthorID, &item.Handle, &publishedAt, &item.DurationMS, &item.Score); err != nil {
+			&item.Origin, &item.SourceURL, &item.AuthorID, &item.Handle, &publishedAt, &item.DurationMS, &item.Score); err != nil {
 			return nil, fmt.Errorf("search: scan: %w", err)
 		}
 		if publishedAt.Year() > 1970 {

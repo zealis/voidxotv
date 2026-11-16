@@ -19,7 +19,10 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <header class="topbar vp-glass" :class="{ 'topbar--no-nav': !props.showNav }">
+  <header
+    class="topbar vp-glass"
+    :class="{ 'topbar--no-nav': !props.showNav, 'topbar--auto-hide': props.collapsed }"
+  >
     <div class="channels" role="tablist" aria-label="内容频道">
       <button
         type="button" role="tab" :aria-selected="props.channel === 'follow'"
@@ -88,5 +91,18 @@ const emit = defineEmits<{
   height: 44px;
   color: var(--vp-im-text-primary);
   text-decoration: none;
+}
+/* PC 端：与底栏同一套收起逻辑——视频播放中 / 图片浏览态顶栏一起退场，
+   暂停（视频）或点画面（图片）才回来。移动端（≤780px）不匹配这条规则，顶栏常驻。
+   collapsed 的语义由页面层算好（index.vue / ImmersiveDetail.vue 的 chromeCollapsed）。 */
+@media (min-width: 781px) {
+  .topbar { transition: opacity 200ms ease, transform 200ms ease, visibility 0s; }
+  .topbar--auto-hide {
+    opacity: 0;
+    transform: translateY(-100%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 200ms ease, transform 200ms ease, visibility 0s linear 200ms;
+  }
 }
 </style>

@@ -623,7 +623,8 @@ type ReportSubmission struct {
 func (r *Repository) SubmitReport(ctx context.Context, reporterID int64,
 	objectType string, objectID int64, reason, detail string) (ReportSubmission, error) {
 	validReasons := map[string]bool{"vulgar": true, "copyright": true,
-		"harassment": true, "fraud": true, "other": true}
+		"harassment": true, "fraud": true, "other": true,
+		"dead_video": true}
 	if !validReasons[reason] {
 		return ReportSubmission{}, fmt.Errorf("%w: 举报理由无效", ErrInvalidInput)
 	}

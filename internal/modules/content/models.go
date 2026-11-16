@@ -36,6 +36,14 @@ type Content struct {
 	FeedEligible bool            `json:"feed_eligible"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
+	// 去中心化（external_direct）：视频不落存储，contents 直接收外部直链。
+	// Origin 沿用 000001 预留的 origin 取值（uploaded / external_direct / external_imported）。
+	Origin     string `json:"origin,omitempty"`
+	SourceURL  string `json:"source_url,omitempty"`
+	DurationMS int64  `json:"duration_ms,omitempty"`
+	// 在线地址存活检测：连续失败达阈值（3）会退出推荐流并通知作者，成功清零。
+	SourceFailCount int        `json:"source_fail_count,omitempty"`
+	SourceCheckedAt *time.Time `json:"source_checked_at,omitempty"`
 	// MediaStatus 不是 contents 列：仅「我的作品」列表为视频补充转码状态
 	// （ready / processing / failed / none），前端据此显示「处理中」徽标（§10）。
 	MediaStatus string `json:"media_status,omitempty"`
@@ -48,6 +56,10 @@ type CreateDraftInput struct {
 	Type        string
 	Title       string
 	Description string
+	// 去中心化：Origin=external_direct 时 SourceURL 必填（http/https 直链）。
+	Origin     string
+	SourceURL  string
+	DurationMS int64
 }
 
 type UpdateDraftInput struct {

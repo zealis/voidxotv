@@ -336,6 +336,7 @@ onBeforeUnmount(() => {
 
       <ReportDialog
         :open="reportOpen" :content-id="item.id" :content-title="item.title"
+        :dead-video="item.origin === 'external_direct'"
         @close="reportOpen = false" @reported="notify('举报已提交，处置结果会发到消息')"
       />
       <button

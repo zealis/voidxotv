@@ -180,22 +180,33 @@ async function retry(key: string) {
   await uploadOne(key)
 }
 
-async function remove(key: string) {
-  if (props.disabled) return
+// 删除走统一二次确认：点 × 先弹 VpConfirmDialog，确认后才真正删。
+const removing = ref<string | null>(null)
+const removingBusy = ref(false)
+
+async function remove() {
+  const key = removing.value
+  if (!key || props.disabled || removingBusy.value) return
   const index = items.value.findIndex((item) => item.key === key)
-  if (index < 0) return
   const entry = items.value[index]
-  if (!entry) return
+  if (!entry) {
+    removing.value = null
+    return
+  }
+  removingBusy.value = true
   if (entry.id && props.contentId) {
     try {
       await api(`/api/v1/contents/${props.contentId}/images/${entry.id}`, { method: 'DELETE' })
     } catch (error) {
       hint.value = `删除失败：${errorMessage(error)}`
+      removingBusy.value = false
       return
     }
   }
   if (entry.localUrl) URL.revokeObjectURL(entry.localUrl)
   items.value.splice(index, 1)
+  removingBusy.value = false
+  removing.value = null
 }
 
 function move(from: number, to: number) {
@@ -321,7 +332,7 @@ function onInputChange(event: Event) {
           <button
             type="button" class="danger" :disabled="disabled"
             :aria-label="`删除第 ${index + 1} 张`" title="删除"
-            @click="remove(item.key)"
+            @click="removing = item.key"
           >×</button>
         </div>
         <p v-if="item.status === 'error'" class="err-detail">{{ item.error }}</p>
@@ -330,6 +341,13 @@ function onInputChange(event: Event) {
 
     <p v-if="hint" class="hint" role="status">{{ hint }}</p>
     <p class="note">拖拽或用卡片按钮调整顺序，首图即封面。</p>
+
+    <VpConfirmDialog
+      :open="removing !== null" title="删除图片" :busy="removingBusy"
+      @close="removing = null" @confirm="remove"
+    >
+      确定删除这张图片吗？删除后需要重新上传才能加回图集。
+    </VpConfirmDialog>
   </div>
 </template>
 

@@ -110,6 +110,19 @@ func (h *Handler) Summary(ctx context.Context, item content.Content, signed bool
 }
 
 func (h *Handler) build(ctx context.Context, item content.Content, signed, full bool) (Playback, error) {
+	// 去中心化（external_direct）：视频不落存储，直接把外部直链当唯一可播文件返回。
+	// 不查转码清单（也不会有），Status/Mode 与本地视频的就绪语义保持一致。
+	if item.Origin == "external_direct" && item.SourceURL != "" {
+		return Playback{
+			Status: "ready", ContentID: item.ID, Slug: item.Slug, Mode: "mp4",
+			DurationMS: item.DurationMS, Signed: false,
+			Files: []File{{
+				Key: item.SourceURL, Kind: "mp4", ContentType: "video/mp4",
+				ByteSize: 0, URL: item.SourceURL,
+			}},
+			MediaURL: item.SourceURL,
+		}, nil
+	}
 	result := Playback{
 		Status: "processing", ContentID: item.ID, Slug: item.Slug, Mode: "none",
 		Signed: signed, Files: []File{},
